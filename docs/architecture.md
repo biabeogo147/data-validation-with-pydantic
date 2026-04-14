@@ -23,7 +23,7 @@ Adding a new lesson should not require changes to the runner or UI. A contributo
 
 ## Execution Flow
 
-1. UI reads the visible exercise catalog.
+1. UI reads the exercise catalog.
 2. Learner edits one or more placeholders.
 3. `template.ts` injects placeholder code into `templateCode`.
 4. `exercise-runner.ts` derives fixture mounts and builds the final Python script.

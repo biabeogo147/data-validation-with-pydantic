@@ -6,6 +6,7 @@ export const csvImportExercise: ExerciseDefinition = {
   shortTitle: 'CSV Validation',
   description:
     'Read a CSV file from the repo, validate each row with Pydantic, and separate valid rows from invalid ones.',
+  editorImports: ['from pydantic import BaseModel', 'from pydantic import ValidationError'],
   difficulty: 'intermediate',
   tags: ['csv', 'fixtures', 'ValidationError'],
   templateCode: [
@@ -34,8 +35,6 @@ export const csvImportExercise: ExerciseDefinition = {
     {
       id: 'USER_MODEL',
       label: 'Define User',
-      description: 'Make `age` an integer so broken rows fail validation.',
-      placeholderHint: 'Hint: define `class User(BaseModel): ...`',
       defaultCode: ['class User(BaseModel):', '    name: str', '    age: int'].join(
         '\n',
       ),
@@ -69,7 +68,6 @@ export const csvImportExercise: ExerciseDefinition = {
       {
         id: 'users',
         fileCsvPath: 'fixtures/users.csv',
-        description: 'Three rows, one of them intentionally invalid.',
       },
     ],
   },
@@ -77,18 +75,17 @@ export const csvImportExercise: ExerciseDefinition = {
     'The CSV file is mounted for Pyodide at `/data/users.csv`.',
     'Use `ValidationError` to capture bad rows without crashing the whole script.',
   ],
-  explanation:
-    'This exercise demonstrates a practical schema-validation workflow: parse each row, validate it with Pydantic, keep the valid records, and track the failures for later review.',
+  example: {
+    title: 'Example output',
+    code: "{'valid_count': 2, 'invalid_rows': ['Broken']}",
+  },
   solutionCode: {
     USER_MODEL: ['class User(BaseModel):', '    name: str', '    age: int'].join(
       '\n',
     ),
   },
-  visible: true,
   uiConfig: {
     runButtonLabel: 'Run CSV Exercise',
-    editorLayout: 'single',
-    outputMode: 'stacked',
   },
   learningConfig: {
     estimatedMinutes: 10,
@@ -102,7 +99,5 @@ export const csvImportExercise: ExerciseDefinition = {
     modelPlaceholderId: 'USER_MODEL',
     csvFileId: 'users',
     fieldOrder: ['name', 'age'],
-    title: 'Whole-file CSV walkthrough',
-    description: 'Inspect how the model processes every row in the CSV and isolates the broken one.',
   },
 };

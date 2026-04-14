@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import { getFixtureMounts } from '../lib/exercise-runner';
 import { getRuntimeBasePath } from '../lib/github-pages';
@@ -10,19 +10,26 @@ import {
   type VisualizationRowResult,
   type VisualizationStep,
 } from '../lib/validation-visualizer';
-import type { ExerciseDefinition, ExercisePlaceholderValues } from '../types/exercise';
+import type {
+  ExerciseDefinition,
+  ExercisePlaceholderValues,
+  ExerciseRunResult,
+} from '../types/exercise';
 
 export type VisualizationPlaybackSpeed = '1x' | '2x' | '4x';
+export type ValidationVisualizerMode = 'choice' | 'walkthrough' | 'direct';
 
 export interface ValidationVisualizerState {
   isOpen: boolean;
   status: 'closed' | 'choice' | 'loading' | 'playing' | 'complete' | 'error';
+  mode: ValidationVisualizerMode;
   exerciseId: string | null;
   speed: VisualizationPlaybackSpeed | null;
   request: VisualizationRequest | null;
   rawRows: Record<string, string>[];
   steps: VisualizationStep[];
   rowResults: VisualizationRowResult[];
+  runResult: ExerciseRunResult | null;
   currentStepIndex: number;
   detail: string;
   error: string | null;
@@ -31,12 +38,14 @@ export interface ValidationVisualizerState {
 const INITIAL_STATE: ValidationVisualizerState = {
   isOpen: false,
   status: 'closed',
+  mode: 'choice',
   exerciseId: null,
   speed: null,
   request: null,
   rawRows: [],
   steps: [],
   rowResults: [],
+  runResult: null,
   currentStepIndex: -1,
   detail: '',
   error: null,
@@ -58,11 +67,47 @@ function uniquePackages(packages: string[]) {
   return Array.from(new Set(packages.filter(Boolean)));
 }
 
+async function executeVisualizationRequest(
+  request: VisualizationRequest,
+  exercise: ExerciseDefinition,
+  token: number,
+  activeTokenRef: RefObject<number>,
+  setState: Dispatch<SetStateAction<ValidationVisualizerState>>,
+  loadingDetail: string,
+) {
+  const execution = await runExerciseInPyodide(
+    {
+      code: request.pythonSource,
+      packages: uniquePackages([
+        'pydantic',
+        ...(exercise.runConfig.pythonPackages ?? []),
+      ]),
+      fixtures: getFixtureMounts(exercise, getRuntimeBasePath()),
+    },
+    () => {
+      if (activeTokenRef.current !== token) {
+        return;
+      }
+
+      setState((currentState) => ({
+        ...currentState,
+        detail: loadingDetail,
+      }));
+    },
+  );
+
+  if (activeTokenRef.current !== token) {
+    return null;
+  }
+
+  return parseVisualizationStdout(execution.stdout);
+}
+
 export function useValidationVisualizer(options: {
   runExercise: (
     exercise: ExerciseDefinition,
     values: ExercisePlaceholderValues,
-  ) => Promise<unknown>;
+  ) => Promise<ExerciseRunResult>;
 }) {
   const [state, setState] = useState<ValidationVisualizerState>(INITIAL_STATE);
   const activeTokenRef = useRef(0);
@@ -86,10 +131,11 @@ export function useValidationVisualizer(options: {
 
     setState((currentState) => ({
       ...currentState,
+      status: 'loading',
       detail: 'Running the full exercise checks after the walkthrough...',
     }));
 
-    await options.runExercise(exercise, values);
+    const result = await options.runExercise(exercise, values);
 
     if (activeTokenRef.current !== token) {
       return;
@@ -98,7 +144,80 @@ export function useValidationVisualizer(options: {
     setState((currentState) => ({
       ...currentState,
       status: 'complete',
-      detail: 'Visualization complete. The main run result has been updated.',
+      runResult: result,
+      detail: 'Visualization complete. Final exercise result is ready.',
+    }));
+  }
+
+  async function runDirect(
+    token: number,
+    exercise: ExerciseDefinition,
+    values: ExercisePlaceholderValues,
+  ) {
+    setState({
+      isOpen: true,
+      status: 'loading',
+      mode: 'direct',
+      exerciseId: exercise.id,
+      speed: null,
+      request: null,
+      rawRows: [],
+      steps: [],
+      rowResults: [],
+      runResult: null,
+      currentStepIndex: -1,
+      detail: 'Running the exercise directly without the walkthrough...',
+      error: null,
+    });
+
+    try {
+      const request = exercise.visualizationConfig
+        ? buildVisualizationRequest(exercise, values)
+        : null;
+
+      if (request) {
+        const parsed = await executeVisualizationRequest(
+          request,
+          exercise,
+          token,
+          activeTokenRef,
+          setState,
+          'Preparing the full CSV results without the walkthrough...',
+        );
+
+        if (parsed && activeTokenRef.current === token) {
+          setState((currentState) => ({
+            ...currentState,
+            rawRows: parsed.rawRows,
+            rowResults: parsed.rowResults,
+            detail: 'Whole-file CSV results are ready. Running final exercise checks...',
+          }));
+        }
+      }
+    } catch (error) {
+      if (activeTokenRef.current !== token) {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      setState((currentState) => ({
+        ...currentState,
+        error: message,
+        detail: 'Could not prepare the whole-file CSV preview. Running final checks anyway...',
+      }));
+    }
+
+    const result = await options.runExercise(exercise, values);
+
+    if (activeTokenRef.current !== token) {
+      return;
+    }
+
+    setState((currentState) => ({
+      ...currentState,
+      status: 'complete',
+      runResult: result,
+      detail: 'Direct run complete. Final CSV result is ready.',
     }));
   }
 
@@ -106,25 +225,27 @@ export function useValidationVisualizer(options: {
     exercise: ExerciseDefinition,
     values: ExercisePlaceholderValues,
   ) {
-    if (!exercise.visualizationConfig) {
-      await options.runExercise(exercise, values);
-      return;
-    }
-
     const token = activeTokenRef.current + 1;
     activeTokenRef.current = token;
     pendingExerciseRef.current = exercise;
     pendingValuesRef.current = values;
 
+    if (!exercise.visualizationConfig) {
+      await runDirect(token, exercise, values);
+      return;
+    }
+
     setState({
       isOpen: true,
       status: 'choice',
+      mode: 'choice',
       exerciseId: exercise.id,
       speed: null,
       request: null,
       rawRows: [],
       steps: [],
       rowResults: [],
+      runResult: null,
       currentStepIndex: -1,
       detail: 'Choose a playback speed or skip the visual walkthrough.',
       error: null,
@@ -135,13 +256,11 @@ export function useValidationVisualizer(options: {
     const exercise = pendingExerciseRef.current;
     const values = pendingValuesRef.current;
 
-    close();
-
     if (!exercise || !values) {
       return;
     }
 
-    await options.runExercise(exercise, values);
+    await runDirect(activeTokenRef.current, exercise, values);
   }
 
   async function startPlayback(speed: VisualizationPlaybackSpeed) {
@@ -171,51 +290,41 @@ export function useValidationVisualizer(options: {
     setState((currentState) => ({
       ...currentState,
       status: 'loading',
+      mode: 'walkthrough',
       speed,
       request,
       rawRows: [],
       steps: [],
       rowResults: [],
+      runResult: null,
       currentStepIndex: -1,
       error: null,
       detail: 'Preparing the field-by-field visualization...',
     }));
 
     try {
-      const execution = await runExerciseInPyodide(
-        {
-          code: request.pythonSource,
-          packages: uniquePackages([
-            'pydantic',
-            ...(exercise.runConfig.pythonPackages ?? []),
-          ]),
-          fixtures: getFixtureMounts(exercise, getRuntimeBasePath()),
-        },
-        () => {
-          if (activeTokenRef.current !== token) {
-            return;
-          }
-
-          setState((currentState) => ({
-            ...currentState,
-            detail: 'Preparing the Python runtime for the walkthrough...',
-          }));
-        },
+      const parsed = await executeVisualizationRequest(
+        request,
+        exercise,
+        token,
+        activeTokenRef,
+        setState,
+        'Preparing the Python runtime for the walkthrough...',
       );
 
-      if (activeTokenRef.current !== token) {
+      if (!parsed || activeTokenRef.current !== token) {
         return;
       }
-
-      const parsed = parseVisualizationStdout(execution.stdout);
 
       setState((currentState) => ({
         ...currentState,
         status: 'playing',
+        mode: 'walkthrough',
         request,
         rawRows: parsed.rawRows,
         steps: parsed.steps,
         rowResults: parsed.rowResults,
+        runResult: null,
         currentStepIndex: -1,
         detail:
           parsed.steps.length > 0
@@ -244,10 +353,10 @@ export function useValidationVisualizer(options: {
 
       setState((currentState) => ({
         ...currentState,
-        status: 'complete',
+        status: 'loading',
         currentStepIndex:
           parsed.steps.length > 0 ? parsed.steps.length - 1 : -1,
-        detail: 'Field walkthrough complete.',
+        detail: 'Field walkthrough complete. Running final exercise checks...',
       }));
 
       await finalizeRun(token);

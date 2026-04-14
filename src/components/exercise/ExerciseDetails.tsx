@@ -1,4 +1,4 @@
-import { getFixtureMounts } from '../../lib/exercise-runner';
+import { CsvPreviewPanel } from './CsvPreviewPanel';
 import type { ExerciseDefinition } from '../../types/exercise';
 
 interface ExerciseDetailsProps {
@@ -6,8 +6,6 @@ interface ExerciseDetailsProps {
 }
 
 export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
-  const fixtures = getFixtureMounts(exercise);
-
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-slate-950/20 backdrop-blur">
       <div className="flex flex-wrap items-center gap-3">
@@ -28,6 +26,22 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
         {exercise.description}
       </p>
 
+      {exercise.example ? (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
+            {exercise.example.title ?? 'Example output'}
+          </h2>
+          {exercise.example.description ? (
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              {exercise.example.description}
+            </p>
+          ) : null}
+          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-xs leading-6 text-cyan-50">
+            {exercise.example.code}
+          </pre>
+        </div>
+      ) : null}
+
       {exercise.learningConfig?.objectives?.length ? (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
@@ -40,35 +54,6 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
               </li>
             ))}
           </ul>
-        </div>
-      ) : null}
-
-      {fixtures.length ? (
-        <div className="mt-6">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            Repo CSV Fixtures
-          </h2>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {fixtures.map((fixture) => (
-              <article
-                key={fixture.id}
-                className="rounded-2xl border border-white/10 bg-slate-900/50 p-4"
-              >
-                <p className="text-sm font-semibold text-white">{fixture.id}</p>
-                <p className="mt-2 text-sm text-slate-300">
-                  Source: <code>{fixture.fileCsvPath}</code>
-                </p>
-                <p className="mt-1 text-sm text-slate-300">
-                  Mounted in Pyodide: <code>{fixture.mountPath}</code>
-                </p>
-                {fixture.description ? (
-                  <p className="mt-2 text-sm leading-6 text-slate-400">
-                    {fixture.description}
-                  </p>
-                ) : null}
-              </article>
-            ))}
-          </div>
         </div>
       ) : null}
 
@@ -87,16 +72,7 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
         </div>
       ) : null}
 
-      {exercise.explanation ? (
-        <details className="mt-6 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-[0.22em] text-slate-200">
-            Why this works
-          </summary>
-          <p className="mt-4 text-sm leading-7 text-slate-300">
-            {exercise.explanation}
-          </p>
-        </details>
-      ) : null}
+      <CsvPreviewPanel exercise={exercise} />
     </section>
   );
 }

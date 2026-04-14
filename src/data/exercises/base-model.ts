@@ -6,6 +6,7 @@ export const baseModelExercise: ExerciseDefinition = {
   shortTitle: 'BaseModel',
   description:
     'Define a simple Pydantic model and watch Pydantic coerce string input into the right Python types.',
+  editorImports: ['from pydantic import BaseModel'],
   difficulty: 'beginner',
   tags: ['BaseModel', 'model_validate', 'coercion'],
   templateCode: [
@@ -34,8 +35,6 @@ export const baseModelExercise: ExerciseDefinition = {
     {
       id: 'MODEL_A',
       label: 'Define model A',
-      description: 'Create a Pydantic model with `name` and `age` fields.',
-      placeholderHint: 'Use `class A(BaseModel): ...`',
       defaultCode: ['class A(BaseModel):', '    name: str', '    age: int'].join(
         '\n',
       ),
@@ -67,7 +66,6 @@ export const baseModelExercise: ExerciseDefinition = {
       {
         id: 'people',
         fileCsvPath: 'fixtures/base-model.csv',
-        description: 'Two valid rows for a basic coercion walkthrough.',
       },
     ],
   },
@@ -75,16 +73,20 @@ export const baseModelExercise: ExerciseDefinition = {
     'Pydantic models inherit from `BaseModel`.',
     'Every row from `csv.DictReader` starts as strings.',
   ],
-  explanation:
-    'Pydantic reads each CSV row as a string-based dictionary and uses the field annotations on `A` to coerce `age` into an integer for every row.',
+  example: {
+    title: 'Example output',
+    code: [
+      "{'valid_count': 2, 'invalid_count': 0, 'valid_rows': [",
+      "  {'name': 'An', 'age': 20},",
+      "  {'name': 'Binh', 'age': 21}",
+      ']}',
+    ].join('\n'),
+  },
   solutionCode: {
     MODEL_A: ['class A(BaseModel):', '    name: str', '    age: int'].join('\n'),
   },
-  visible: true,
   uiConfig: {
     runButtonLabel: 'Run Validation',
-    editorLayout: 'single',
-    outputMode: 'stacked',
   },
   learningConfig: {
     estimatedMinutes: 5,
@@ -98,7 +100,5 @@ export const baseModelExercise: ExerciseDefinition = {
     modelPlaceholderId: 'MODEL_A',
     csvFileId: 'people',
     fieldOrder: ['name', 'age'],
-    title: 'Whole-file coercion',
-    description: 'Watch Pydantic process every row in the CSV and coerce `age` field values.',
   },
 };

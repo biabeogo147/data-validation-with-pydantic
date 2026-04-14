@@ -98,7 +98,7 @@ function getVisualizationCsvMountPath(
   exercise: ExerciseDefinition,
   visualizationConfig: ExerciseVisualizationConfig,
 ): string {
-  const csvFiles = exercise.fileCsvConfig?.files ?? [];
+  const csvFiles = exercise.fileCsvConfig.files;
 
   if (csvFiles.length === 0) {
     throw new Error(`Exercise "${exercise.id}" must provide a CSV file.`);
@@ -269,12 +269,10 @@ export function parseVisualizationStdout(stdout: string): {
   rawRows: Record<string, string>[];
   steps: VisualizationStep[];
   rowResults: VisualizationRowResult[];
-  visibleStdout: string;
 } {
   const rawRows: Record<string, string>[] = [];
   const steps: VisualizationStep[] = [];
   const rowResults: VisualizationRowResult[] = [];
-  const visibleLines: string[] = [];
 
   for (const line of stdout.split('\n')) {
     if (line.startsWith(VISUALIZER_MARKER)) {
@@ -303,17 +301,12 @@ export function parseVisualizationStdout(stdout: string): {
       );
       continue;
     }
-
-    if (line.trim()) {
-      visibleLines.push(line);
-    }
   }
 
   return {
     rawRows,
     steps,
     rowResults,
-    visibleStdout: visibleLines.join('\n').trim(),
   };
 }
 

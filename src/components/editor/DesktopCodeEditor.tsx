@@ -1,25 +1,25 @@
 import Editor from '@monaco-editor/react';
 
+import { EditorImportsHint } from './EditorImportsHint';
+
 interface DesktopCodeEditorProps {
-  label: string;
-  description?: string;
+  label?: string;
+  importLines?: string[];
   value: string;
   onChange: (value: string) => void;
 }
 
 export default function DesktopCodeEditor({
   label,
-  description,
+  importLines,
   value,
   onChange,
 }: DesktopCodeEditorProps) {
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <p className="text-sm font-semibold text-slate-100">{label}</p>
-        {description ? (
-          <p className="mt-1 text-sm text-slate-400">{description}</p>
-        ) : null}
+        {label ? <p className="text-sm font-semibold text-slate-100">{label}</p> : null}
+        <EditorImportsHint importLines={importLines} />
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 shadow-lg shadow-slate-950/40">

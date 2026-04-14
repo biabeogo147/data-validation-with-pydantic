@@ -41,9 +41,7 @@ export function assembleExerciseCode(
     }
 
     const placeholderValue = mergedValues[placeholder.id];
-    const isRequired = placeholder.required ?? true;
-
-    if (isRequired && !placeholderValue?.trim()) {
+    if (!placeholderValue?.trim()) {
       throw new Error(`${getPlaceholderLabel(placeholder.id)} is required.`);
     }
   }

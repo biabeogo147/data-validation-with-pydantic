@@ -72,7 +72,6 @@ describe('exercise runner orchestration', () => {
     expect(result.status).toBe('pass');
     expect(result.stdout).toBe('loaded');
     expect(result.stderr).toBe('');
-    expect(result.assembledCode).toContain('class User: pass');
     expect(result.checks).toEqual([
       {
         id: 'stdout-check',

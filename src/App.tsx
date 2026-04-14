@@ -1,11 +1,11 @@
 import { startTransition, useState } from 'react';
 
 import { ExerciseEditor } from './components/editor/ExerciseEditor';
+import { PlaceholderTabs } from './components/editor/PlaceholderTabs';
 import { ExerciseDetails } from './components/exercise/ExerciseDetails';
 import { ExerciseList } from './components/exercise/ExerciseList';
-import { RunOutput } from './components/output/RunOutput';
 import { ValidationVisualizerModal } from './components/output/ValidationVisualizerModal';
-import { useExercises } from './hooks/useExercises';
+import { exerciseCatalog } from './data/exercises';
 import { useExerciseRunner } from './hooks/useExerciseRunner';
 import { useIsMobile } from './hooks/useIsMobile';
 import { useValidationVisualizer } from './hooks/useValidationVisualizer';
@@ -13,7 +13,7 @@ import { createInitialExerciseSessionState } from './lib/exercise-session';
 import { getInitialPlaceholderValues } from './lib/template';
 
 export default function App() {
-  const { exercises } = useExercises();
+  const exercises = exerciseCatalog;
   const isMobile = useIsMobile();
   const runner = useExerciseRunner();
   const visualizer = useValidationVisualizer({
@@ -99,92 +99,67 @@ export default function App() {
                   <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
                     Editor
                   </p>
-                  <h2 className="mt-3 text-2xl font-semibold text-white">
-                    Fill the placeholder code
-                  </h2>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-white/30 hover:bg-white/8"
-                    type="button"
-                    onClick={() => {
-                      setSessionState((currentSessionState) => ({
-                        ...currentSessionState,
-                        draftsByExerciseId: {
-                          ...currentSessionState.draftsByExerciseId,
-                          [selectedExercise.id]: getInitialPlaceholderValues(
-                            selectedExercise,
-                          ),
-                        },
-                      }));
-                      visualizer.close();
-                      runner.reset();
-                    }}
-                  >
-                    Reset Starter Code
-                  </button>
-                  <button
-                    className="rounded-full border border-cyan-400/30 bg-cyan-500/12 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
-                    type="button"
-                    onClick={() => {
-                      setSessionState((currentSessionState) => ({
-                        ...currentSessionState,
-                        showSolutionByExerciseId: {
-                          ...currentSessionState.showSolutionByExerciseId,
-                          [selectedExercise.id]: !showSolution,
-                        },
-                      }));
-                    }}
-                  >
-                    {showSolution ? 'Hide Solution' : 'Show Solution'}
-                  </button>
-                  <button
-                    className="rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
-                    disabled={
-                      runner.state.phase === 'booting' ||
-                      runner.state.phase === 'running'
-                    }
-                    type="button"
-                    onClick={() => {
-                      void visualizer.open(selectedExercise, currentValues);
-                    }}
-                  >
-                    {selectedExercise.uiConfig?.runButtonLabel ?? 'Run'}
-                  </button>
+                <div className="flex flex-wrap items-center gap-3">
+                <button
+                  className="text-sm text-slate-400 transition hover:text-slate-200"
+                  type="button"
+                  onClick={() => {
+                    setSessionState((currentSessionState) => ({
+                      ...currentSessionState,
+                      draftsByExerciseId: {
+                        ...currentSessionState.draftsByExerciseId,
+                        [selectedExercise.id]: getInitialPlaceholderValues(
+                          selectedExercise,
+                        ),
+                      },
+                    }));
+                    visualizer.close();
+                    runner.reset();
+                  }}
+                >
+                  Reset
+                </button>
+                <button
+                  className="rounded-full bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                  disabled={
+                    runner.state.phase === 'booting' ||
+                    runner.state.phase === 'running'
+                  }
+                  type="button"
+                  onClick={() => {
+                    void visualizer.open(selectedExercise, currentValues);
+                  }}
+                >
+                  {selectedExercise.uiConfig?.runButtonLabel ?? 'Run'}
+                </button>
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                {selectedExercise.placeholders.map((placeholder) => (
-                  <button
-                    key={placeholder.id}
-                    className={`rounded-full border px-4 py-2 text-sm transition ${
-                      placeholder.id === activePlaceholder.id
-                        ? 'border-cyan-400 bg-cyan-500/10 text-cyan-100'
-                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/25 hover:bg-white/8'
-                    }`}
-                    type="button"
-                    onClick={() => {
-                      setSessionState((currentSessionState) => ({
-                        ...currentSessionState,
-                        activePlaceholderByExerciseId: {
-                          ...currentSessionState.activePlaceholderByExerciseId,
-                          [selectedExercise.id]: placeholder.id,
-                        },
-                      }));
-                    }}
-                  >
-                    {placeholder.label ?? placeholder.id}
-                  </button>
-                ))}
-              </div>
+              <PlaceholderTabs
+                activePlaceholderId={activePlaceholder.id}
+                placeholders={selectedExercise.placeholders}
+                onSelect={(placeholderId) => {
+                  setSessionState((currentSessionState) => ({
+                    ...currentSessionState,
+                    activePlaceholderByExerciseId: {
+                      ...currentSessionState.activePlaceholderByExerciseId,
+                      [selectedExercise.id]: placeholderId,
+                    },
+                  }));
+                }}
+              />
 
-              <div className="mt-6">
+              <div className="mt-5">
                 <ExerciseEditor
-                  description={activePlaceholder.description}
+                  importLines={selectedExercise.editorImports}
                   isMobile={isMobile}
-                  label={activePlaceholder.label ?? activePlaceholder.id}
+                  label={
+                    selectedExercise.placeholders.length > 1
+                      ? activePlaceholder.label ?? activePlaceholder.id
+                      : undefined
+                  }
                   value={currentValues[activePlaceholder.id] ?? ''}
                   onChange={(value) => {
                     setSessionState((currentSessionState) => ({
@@ -201,6 +176,26 @@ export default function App() {
                     }));
                   }}
                 />
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-4">
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    className="text-sm text-emerald-200 transition hover:text-emerald-100 hover:underline"
+                    type="button"
+                    onClick={() => {
+                      setSessionState((currentSessionState) => ({
+                        ...currentSessionState,
+                        showSolutionByExerciseId: {
+                          ...currentSessionState.showSolutionByExerciseId,
+                          [selectedExercise.id]: !showSolution,
+                        },
+                      }));
+                    }}
+                  >
+                    {showSolution ? 'Hide reference solution' : 'Show reference solution'}
+                  </button>
+                </div>
               </div>
 
               {showSolution && selectedExercise.solutionCode ? (
@@ -230,8 +225,6 @@ export default function App() {
                 </div>
               ) : null}
             </section>
-
-            <RunOutput state={runner.state} />
           </div>
         </div>
       </div>

@@ -48,7 +48,7 @@ Every exercise can define:
 - `checks`
 - `fileCsvConfig`
 - `visualizationConfig`
-- `hints`, `explanation`, `solutionCode`, `uiConfig`, and `learningConfig`
+- `hints`, `solutionCode`, `uiConfig`, and `learningConfig`
 
 When a learner clicks **Run**, the app:
 
@@ -56,7 +56,7 @@ When a learner clicks **Run**, the app:
 2. injects it into the exercise template
 3. mounts any configured CSV fixtures into the Pyodide filesystem
 4. optionally walks through the CSV field-by-field in the teaching modal
-5. executes the assembled Python script against the CSV rows
+5. executes the final Python script against the CSV rows
 6. evaluates checks and renders pass/fail output
 
 ## Adding A New Exercise

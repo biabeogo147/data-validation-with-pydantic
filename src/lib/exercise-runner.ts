@@ -115,7 +115,7 @@ export function getFixtureMounts(
   exercise: Pick<ExerciseDefinition, 'fileCsvConfig'>,
   basePath: string = '/',
 ): ExerciseFixtureMount[] {
-  return (exercise.fileCsvConfig?.files ?? []).map((file) => {
+  return exercise.fileCsvConfig.files.map((file) => {
     const fileName = getFileName(file.fileCsvPath);
 
     return {
@@ -123,7 +123,6 @@ export function getFixtureMounts(
       fileCsvPath: file.fileCsvPath,
       publicUrl: withBasePath(file.fileCsvPath, basePath),
       mountPath: file.mountPath ?? `/data/${fileName}`,
-      description: file.description,
     };
   });
 }
@@ -134,13 +133,13 @@ export async function executeExercise(
   adapter: ExerciseExecutionAdapter,
   basePath: string = '/',
 ): Promise<ExerciseRunResult> {
-  const assembledCode = buildExecutableCode(exercise, values);
+  const executableCode = buildExecutableCode(exercise, values);
   const fixtures = getFixtureMounts(exercise, basePath);
   const packages = uniquePackages(['pydantic', ...(exercise.runConfig.pythonPackages ?? [])]);
 
   try {
     const execution = await adapter({
-      code: assembledCode,
+      code: executableCode,
       packages,
       fixtures,
     });
@@ -155,7 +154,6 @@ export async function executeExercise(
       status: hasFailedCheck ? 'fail' : 'pass',
       stdout: visibleStdout,
       stderr: execution.stderr.trim(),
-      assembledCode,
       checks,
     };
   } catch (error) {
@@ -165,7 +163,6 @@ export async function executeExercise(
       status: 'error',
       stdout: '',
       stderr: message,
-      assembledCode,
       checks: [],
     };
   }

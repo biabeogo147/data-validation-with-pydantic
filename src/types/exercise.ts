@@ -3,16 +3,12 @@ export type ExerciseDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export interface ExercisePlaceholder {
   id: string;
   label?: string;
-  description?: string;
   defaultCode: string;
-  required?: boolean;
-  placeholderHint?: string;
 }
 
 export interface ExerciseRunConfig {
   pythonPackages?: string[];
   bootstrapCode?: string;
-  timeoutMs?: number;
 }
 
 export interface ExercisePythonAssertCheck {
@@ -41,7 +37,6 @@ export interface ExerciseCsvFile {
   id: string;
   fileCsvPath: string;
   mountPath?: string;
-  description?: string;
 }
 
 export interface ExerciseFileCsvConfig {
@@ -50,14 +45,11 @@ export interface ExerciseFileCsvConfig {
 
 export interface ExerciseUiConfig {
   runButtonLabel?: string;
-  editorLayout?: 'single' | 'split';
-  outputMode?: 'stacked' | 'inline';
 }
 
 export interface ExerciseLearningConfig {
   estimatedMinutes?: number;
   objectives?: string[];
-  prerequisites?: string[];
 }
 
 export interface ExerciseVisualizationConfig {
@@ -65,8 +57,12 @@ export interface ExerciseVisualizationConfig {
   modelPlaceholderId: string;
   csvFileId?: string;
   fieldOrder?: string[];
+}
+
+export interface ExerciseExample {
   title?: string;
   description?: string;
+  code: string;
 }
 
 export interface ExerciseDefinition {
@@ -74,17 +70,17 @@ export interface ExerciseDefinition {
   title: string;
   shortTitle?: string;
   description: string;
+  editorImports?: string[];
   difficulty?: ExerciseDifficulty;
   tags?: string[];
   templateCode: string;
   placeholders: ExercisePlaceholder[];
   runConfig: ExerciseRunConfig;
   checks: ExerciseCheckDefinition[];
-  fileCsvConfig?: ExerciseFileCsvConfig;
+  fileCsvConfig: ExerciseFileCsvConfig;
   hints?: string[];
-  explanation?: string;
+  example?: ExerciseExample;
   solutionCode?: Record<string, string>;
-  visible?: boolean;
   uiConfig?: ExerciseUiConfig;
   learningConfig?: ExerciseLearningConfig;
   visualizationConfig?: ExerciseVisualizationConfig;
@@ -97,7 +93,6 @@ export interface ExerciseFixtureMount {
   fileCsvPath: string;
   publicUrl: string;
   mountPath: string;
-  description?: string;
 }
 
 export interface ExerciseExecutionRequest {
@@ -127,6 +122,5 @@ export interface ExerciseRunResult {
   status: 'pass' | 'fail' | 'error';
   stdout: string;
   stderr: string;
-  assembledCode: string;
   checks: ExerciseCheckResult[];
 }

@@ -6,6 +6,7 @@ export const strictProfileExercise: ExerciseDefinition = {
   shortTitle: 'Strict Fields',
   description:
     'Define a profile model that accepts real integers but rejects strings that only look like integers.',
+  editorImports: ['from pydantic import BaseModel, StrictInt'],
   difficulty: 'intermediate',
   tags: ['StrictInt', 'Field', 'ValidationError'],
   templateCode: [
@@ -34,8 +35,6 @@ export const strictProfileExercise: ExerciseDefinition = {
     {
       id: 'MODEL_PROFILE',
       label: 'Define Profile',
-      description: 'Use a strict integer type for the age field.',
-      placeholderHint: 'Hint: `StrictInt` is already imported for you.',
       defaultCode: [
         'class Profile(BaseModel):',
         '    username: str',
@@ -71,7 +70,6 @@ export const strictProfileExercise: ExerciseDefinition = {
       {
         id: 'profiles',
         fileCsvPath: 'fixtures/strict-profile.csv',
-        description: 'Rows that stay as strings after CSV parsing, ideal for StrictInt rejection.',
       },
     ],
   },
@@ -79,8 +77,15 @@ export const strictProfileExercise: ExerciseDefinition = {
     'Use `StrictInt` if you want a field that will not coerce strings into integers.',
     'Keep `username` as a normal string field.',
   ],
-  explanation:
-    'CSV values are strings by default, so `StrictInt` rejects them. This makes the exercise a good demonstration of why strict types can be useful for detecting untrusted or pre-parsed input.',
+  example: {
+    title: 'Example output',
+    code: [
+      "{'valid_count': 0, 'invalid_count': 2, 'invalid_rows': [",
+      "  {'row': {'username': 'an', 'age': '20'}, 'errors': 1},",
+      "  {'row': {'username': 'binh', 'age': '21'}, 'errors': 1}",
+      ']}',
+    ].join('\n'),
+  },
   solutionCode: {
     MODEL_PROFILE: [
       'class Profile(BaseModel):',
@@ -88,11 +93,8 @@ export const strictProfileExercise: ExerciseDefinition = {
       '    age: StrictInt',
     ].join('\n'),
   },
-  visible: true,
   uiConfig: {
     runButtonLabel: 'Check Strictness',
-    editorLayout: 'single',
-    outputMode: 'stacked',
   },
   learningConfig: {
     estimatedMinutes: 8,
@@ -106,7 +108,5 @@ export const strictProfileExercise: ExerciseDefinition = {
     modelPlaceholderId: 'MODEL_PROFILE',
     csvFileId: 'profiles',
     fieldOrder: ['username', 'age'],
-    title: 'Whole-file strict validation',
-    description: 'See how `StrictInt` rejects CSV rows because every age value arrives as a string.',
   },
 };

@@ -5,6 +5,7 @@ import type {
   ValidationVisualizerState,
   VisualizationPlaybackSpeed,
 } from '../../hooks/useValidationVisualizer';
+import type { ExerciseRunResult } from '../../types/exercise';
 
 interface ValidationVisualizerModalProps {
   state: ValidationVisualizerState;
@@ -23,6 +24,205 @@ function formatValue(value: unknown) {
 
 const valuePreClassName =
   'mt-2 overflow-x-auto whitespace-pre-wrap break-words text-sm leading-6 text-slate-100';
+
+function getRunStatusBadgeClasses(status: 'running' | ExerciseRunResult['status']) {
+  switch (status) {
+    case 'pass':
+      return 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200';
+    case 'fail':
+      return 'border-amber-400/40 bg-amber-500/10 text-amber-200';
+    case 'error':
+      return 'border-rose-400/40 bg-rose-500/10 text-rose-200';
+    case 'running':
+      return 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100';
+  }
+}
+
+function renderExerciseResultSection({
+  detail,
+  result,
+}: {
+  detail: string;
+  result: ExerciseRunResult | null;
+}) {
+  const status = result?.status ?? 'running';
+
+  return (
+    <section className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
+            Final Result
+          </p>
+          <h3 className="mt-3 text-2xl font-semibold text-white">
+            Exercise result
+          </h3>
+        </div>
+        <span
+          className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.24em] ${getRunStatusBadgeClasses(
+            status,
+          )}`}
+        >
+          {status}
+        </span>
+      </div>
+
+      <p className="mt-4 text-sm leading-6 text-slate-300">{detail}</p>
+
+      {result?.checks.length ? (
+        <div className="mt-6 grid gap-3">
+          {result.checks.map((check) => (
+            <article
+              key={check.id}
+              className={`rounded-2xl border p-4 ${
+                check.passed
+                  ? 'border-emerald-400/20 bg-emerald-500/8'
+                  : 'border-amber-400/20 bg-amber-500/8'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm font-semibold text-white">{check.label}</p>
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs uppercase tracking-[0.2em] ${
+                    check.passed
+                      ? 'bg-emerald-500/15 text-emerald-200'
+                      : 'bg-amber-500/15 text-amber-200'
+                  }`}
+                >
+                  {check.passed ? 'pass' : 'fail'}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-slate-300">{check.message}</p>
+              {check.detail ? (
+                <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-slate-950/80 p-3 text-xs leading-6 text-rose-200">
+                  {check.detail}
+                </pre>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : null}
+
+      {result?.stderr ? (
+        <div className="mt-6">
+          <h4 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
+            Stderr / Error
+          </h4>
+          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-rose-400/20 bg-rose-950/40 p-4 text-xs leading-6 text-rose-100">
+            {result.stderr}
+          </pre>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function renderWholeFileResultSection({
+  rawRows,
+  rowResults,
+  pendingRows,
+  emptyMessage,
+}: {
+  rawRows: Record<string, string>[];
+  rowResults: {
+    rowIndex: number;
+    passed: boolean;
+    validatedRow: Record<string, unknown> | null;
+    errors: string[];
+  }[];
+  pendingRows: number;
+  emptyMessage: string;
+}) {
+  const passedRows = rowResults.filter((rowResult) => rowResult.passed).length;
+  const failedRows = rowResults.filter((rowResult) => !rowResult.passed).length;
+
+  return (
+    <section className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
+            Whole File Result
+          </p>
+          <h3 className="mt-3 text-2xl font-semibold text-white">
+            Validation results across the full CSV
+          </h3>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
+            Passed rows: {passedRows}
+          </span>
+          <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
+            Failed rows: {failedRows}
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+            Pending rows: {pendingRows}
+          </span>
+        </div>
+      </div>
+
+      {rowResults.length > 0 ? (
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          {rowResults.map((rowResult) => {
+            const rawRow = rawRows[rowResult.rowIndex];
+
+            return (
+              <article
+                key={`row-result-${rowResult.rowIndex}`}
+                className={`rounded-3xl border p-5 ${
+                  rowResult.passed
+                    ? 'border-emerald-400/20 bg-emerald-500/8'
+                    : 'border-amber-400/20 bg-amber-500/8'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-base font-semibold text-white">
+                    Row {rowResult.rowIndex + 1}
+                  </p>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
+                      rowResult.passed
+                        ? 'bg-emerald-500/15 text-emerald-100'
+                        : 'bg-amber-500/15 text-amber-100'
+                    }`}
+                  >
+                    {rowResult.passed ? 'valid' : 'invalid'}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3">
+                  <div className="rounded-2xl bg-slate-950/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                      Raw CSV row
+                    </p>
+                    <pre className={valuePreClassName}>
+                      {formatValue(rawRow ?? null)}
+                    </pre>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-950/70 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                      Validation result
+                    </p>
+                    <pre className={valuePreClassName}>
+                      {rowResult.passed
+                        ? formatValue(rowResult.validatedRow)
+                        : formatValue(rowResult.errors)}
+                    </pre>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-6 rounded-3xl border border-dashed border-white/10 bg-slate-950/45 p-5 text-sm leading-7 text-slate-400">
+          {emptyMessage}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function getCompletedStepMap(state: ValidationVisualizerState) {
   const upperBound =
@@ -45,7 +245,7 @@ export function ValidationVisualizerModal({
     return null;
   }
 
-  if (!state.request) {
+  if (!state.request && state.mode === 'choice') {
     if (!state.isOpen || state.status === 'choice') {
       return state.isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur-md">
@@ -116,7 +316,54 @@ export function ValidationVisualizerModal({
         </div>
       ) : null;
     }
+  }
 
+  if (state.mode === 'direct') {
+    const pendingRows = Math.max(state.rawRows.length - state.rowResults.length, 0);
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 px-4 py-6 backdrop-blur-md">
+        <div className="mx-auto max-w-6xl rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/60">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
+                Validation Result
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold text-white">
+                Full CSV validation without the walkthrough
+              </h2>
+              <p className="mt-4 text-sm leading-7 text-slate-300">
+                {state.detail}
+              </p>
+            </div>
+
+            <button
+              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/5"
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+
+          {renderWholeFileResultSection({
+            rawRows: state.rawRows,
+            rowResults: state.rowResults,
+            pendingRows,
+            emptyMessage:
+              'The row-level results will appear here as soon as the direct validation finishes.',
+          })}
+
+          {renderExerciseResultSection({
+            detail: state.detail,
+            result: state.runResult,
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  if (!state.request) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-6 backdrop-blur-md">
         <div className="w-full max-w-2xl rounded-[32px] border border-rose-400/20 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/60">
@@ -165,9 +412,12 @@ export function ValidationVisualizerModal({
   const rowResultMap = new Map(
     visibleRowResults.map((rowResult) => [rowResult.rowIndex, rowResult]),
   );
-  const passedRows = visibleRowResults.filter((rowResult) => rowResult.passed).length;
-  const failedRows = visibleRowResults.filter((rowResult) => !rowResult.passed).length;
   const pendingRows = Math.max(state.rawRows.length - visibleRowResults.length, 0);
+  const shouldShowExerciseResult =
+    Boolean(state.runResult) ||
+    (state.mode === 'walkthrough' &&
+      state.status === 'loading' &&
+      state.currentStepIndex >= 0);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 px-4 py-6 backdrop-blur-md">
@@ -411,93 +661,20 @@ export function ValidationVisualizerModal({
         {(state.status === 'loading' ||
           state.status === 'playing' ||
           state.status === 'complete' ||
-          visibleRowResults.length > 0) && (
-          <section className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
-                  Whole File Result
-                </p>
-                <h3 className="mt-3 text-2xl font-semibold text-white">
-                  Validation results across the full CSV
-                </h3>
-              </div>
+          visibleRowResults.length > 0) &&
+          renderWholeFileResultSection({
+            rawRows: state.rawRows,
+            rowResults: visibleRowResults,
+            pendingRows,
+            emptyMessage:
+              'The row-level results will append here as soon as each CSV row finishes validation.',
+          })}
 
-              <div className="flex flex-wrap gap-3">
-                <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
-                  Passed rows: {passedRows}
-                </span>
-                <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
-                  Failed rows: {failedRows}
-                </span>
-                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-                  Pending rows: {pendingRows}
-                </span>
-              </div>
-            </div>
-
-            {visibleRowResults.length > 0 ? (
-              <div className="mt-6 grid gap-4 lg:grid-cols-2">
-                {visibleRowResults.map((rowResult) => {
-                  const rawRow = state.rawRows[rowResult.rowIndex];
-
-                  return (
-                    <article
-                      key={`row-result-${rowResult.rowIndex}`}
-                      className={`rounded-3xl border p-5 ${
-                        rowResult.passed
-                          ? 'border-emerald-400/20 bg-emerald-500/8'
-                          : 'border-amber-400/20 bg-amber-500/8'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <p className="text-base font-semibold text-white">
-                          Row {rowResult.rowIndex + 1}
-                        </p>
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
-                            rowResult.passed
-                              ? 'bg-emerald-500/15 text-emerald-100'
-                              : 'bg-amber-500/15 text-amber-100'
-                          }`}
-                        >
-                          {rowResult.passed ? 'valid' : 'invalid'}
-                        </span>
-                      </div>
-
-                      <div className="mt-4 grid gap-3">
-                        <div className="rounded-2xl bg-slate-950/70 p-4">
-                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                            Raw CSV row
-                          </p>
-                          <pre className={valuePreClassName}>
-                            {formatValue(rawRow ?? null)}
-                          </pre>
-                        </div>
-
-                        <div className="rounded-2xl bg-slate-950/70 p-4">
-                          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                            Validation result
-                          </p>
-                          <pre className={valuePreClassName}>
-                            {rowResult.passed
-                              ? formatValue(rowResult.validatedRow)
-                              : formatValue(rowResult.errors)}
-                          </pre>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-6 rounded-3xl border border-dashed border-white/10 bg-slate-950/45 p-5 text-sm leading-7 text-slate-400">
-                The row-level results will append here as soon as each CSV row
-                finishes validation.
-              </div>
-            )}
-          </section>
-        )}
+        {shouldShowExerciseResult &&
+          renderExerciseResultSection({
+            detail: state.detail,
+            result: state.runResult,
+          })}
       </div>
     </div>
   );

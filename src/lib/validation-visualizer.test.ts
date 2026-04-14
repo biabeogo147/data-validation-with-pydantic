@@ -130,7 +130,6 @@ describe('parseVisualizationStdout', () => {
         [
           '__PYDANTIC_VISUALIZER_ROWS__[{"name":"An","age":"20"},{"name":"Binh","age":"21"}]',
           '__PYDANTIC_VISUALIZER_STEP__{"rowIndex":0,"fieldName":"name","passed":true,"rawValue":"An","validatedValue":"An","message":"Accepted as str"}',
-          'visible output',
           '__PYDANTIC_VISUALIZER_STEP__{"rowIndex":0,"fieldName":"age","passed":true,"rawValue":"20","validatedValue":20,"message":"Accepted as int"}',
           '__PYDANTIC_VISUALIZER_ROW_RESULT__{"rowIndex":0,"passed":true,"validatedRow":{"name":"An","age":20},"errors":[]}',
         ].join('\n'),
@@ -175,7 +174,6 @@ describe('parseVisualizationStdout', () => {
           errors: [],
         },
       ],
-      visibleStdout: 'visible output',
     });
   });
 });

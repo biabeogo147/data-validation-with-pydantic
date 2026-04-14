@@ -5,8 +5,8 @@ import { PlainCodeEditor } from './PlainCodeEditor';
 const DesktopCodeEditor = lazy(() => import('./DesktopCodeEditor'));
 
 interface ExerciseEditorProps {
-  label: string;
-  description?: string;
+  label?: string;
+  importLines?: string[];
   isMobile: boolean;
   value: string;
   onChange: (value: string) => void;
@@ -14,7 +14,7 @@ interface ExerciseEditorProps {
 
 export function ExerciseEditor({
   label,
-  description,
+  importLines,
   isMobile,
   value,
   onChange,
@@ -22,7 +22,7 @@ export function ExerciseEditor({
   if (isMobile) {
     return (
       <PlainCodeEditor
-        description={description}
+        importLines={importLines}
         label={label}
         value={value}
         onChange={onChange}
@@ -34,7 +34,7 @@ export function ExerciseEditor({
     <Suspense
       fallback={
         <PlainCodeEditor
-          description={description}
+          importLines={importLines}
           label={label}
           value={value}
           onChange={onChange}
@@ -42,7 +42,7 @@ export function ExerciseEditor({
       }
     >
       <DesktopCodeEditor
-        description={description}
+        importLines={importLines}
         label={label}
         value={value}
         onChange={onChange}
