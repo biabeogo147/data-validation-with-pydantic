@@ -97,4 +97,12 @@ export const csvImportExercise: ExerciseDefinition = {
       'Handle per-row validation failures without aborting the whole import.',
     ],
   },
+  visualizationConfig: {
+    modelClassName: 'User',
+    modelPlaceholderId: 'USER_MODEL',
+    csvFileId: 'users',
+    fieldOrder: ['name', 'age'],
+    title: 'Whole-file CSV walkthrough',
+    description: 'Inspect how the model processes every row in the CSV and isolates the broken one.',
+  },
 };

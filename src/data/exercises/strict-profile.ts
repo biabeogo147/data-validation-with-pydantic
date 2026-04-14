@@ -9,20 +9,26 @@ export const strictProfileExercise: ExerciseDefinition = {
   difficulty: 'intermediate',
   tags: ['StrictInt', 'Field', 'ValidationError'],
   templateCode: [
+    'import csv',
+    'from pathlib import Path',
     'from pydantic import BaseModel, StrictInt, ValidationError',
     '',
     '{{MODEL_PROFILE}}',
     '',
-    'valid_profile = Profile.model_validate({"username": "alice", "age": 22})',
-    'strict_error_name = ""',
+    'csv_path = Path("/data/strict-profile.csv")',
+    'valid_rows = []',
+    'invalid_rows = []',
     '',
-    'try:',
-    '    Profile.model_validate({"username": "alice", "age": "22"})',
-    'except ValidationError as exc:',
-    '    strict_error_name = type(exc).__name__',
+    'with csv_path.open("r", encoding="utf-8") as handle:',
+    '    reader = csv.DictReader(handle)',
+    '    for row in reader:',
+    '        try:',
+    '            profile = Profile.model_validate(row)',
+    '            valid_rows.append(profile.model_dump())',
+    '        except ValidationError as exc:',
+    '            invalid_rows.append({"row": row, "errors": len(exc.errors())})',
     '',
-    'print(valid_profile.model_dump())',
-    'print(strict_error_name)',
+    'print({"valid_count": len(valid_rows), "invalid_count": len(invalid_rows), "invalid_rows": invalid_rows})',
   ].join('\n'),
   placeholders: [
     {
@@ -44,31 +50,37 @@ export const strictProfileExercise: ExerciseDefinition = {
     {
       id: 'accepts-real-integers',
       kind: 'python_assert',
-      label: 'accepts integer input',
-      code: ['assert valid_profile.username == "alice"', 'assert valid_profile.age == 22'].join(
+      label: 'strict fields reject CSV strings',
+      code: ['assert len(valid_rows) == 0', 'assert len(invalid_rows) == 2'].join(
         '\n',
       ),
-      successMessage: 'The model accepts a real integer payload.',
-      failureMessage: 'The valid payload should still be accepted.',
+      successMessage: 'StrictInt rejects both CSV rows because their ages are strings.',
+      failureMessage: 'Every CSV row should fail because `StrictInt` will not coerce strings.',
     },
     {
       id: 'rejects-string-number',
       kind: 'python_assert',
-      label: 'rejects string numbers',
-      code: 'assert strict_error_name == "ValidationError"',
-      successMessage: 'The model rejects string input for the strict field.',
-      failureMessage: 'The age field should reject `"22"` when strict mode is enabled.',
+      label: 'captures validation errors per row',
+      code: 'assert all(item["errors"] >= 1 for item in invalid_rows)',
+      successMessage: 'Each invalid CSV row reports at least one validation error.',
+      failureMessage: 'The invalid rows list should capture validation error counts.',
     },
   ],
   fileCsvConfig: {
-    files: [],
+    files: [
+      {
+        id: 'profiles',
+        fileCsvPath: 'fixtures/strict-profile.csv',
+        description: 'Rows that stay as strings after CSV parsing, ideal for StrictInt rejection.',
+      },
+    ],
   },
   hints: [
     'Use `StrictInt` if you want a field that will not coerce strings into integers.',
     'Keep `username` as a normal string field.',
   ],
   explanation:
-    'Strict field types are helpful when your schema should reject coercion and accept only already-correct values from the caller.',
+    'CSV values are strings by default, so `StrictInt` rejects them. This makes the exercise a good demonstration of why strict types can be useful for detecting untrusted or pre-parsed input.',
   solutionCode: {
     MODEL_PROFILE: [
       'class Profile(BaseModel):',
@@ -88,5 +100,13 @@ export const strictProfileExercise: ExerciseDefinition = {
       'Recognize when coercion is helpful and when it is not.',
       'Use strict field types to enforce exact input types.',
     ],
+  },
+  visualizationConfig: {
+    modelClassName: 'Profile',
+    modelPlaceholderId: 'MODEL_PROFILE',
+    csvFileId: 'profiles',
+    fieldOrder: ['username', 'age'],
+    title: 'Whole-file strict validation',
+    description: 'See how `StrictInt` rejects CSV rows because every age value arrives as a string.',
   },
 };

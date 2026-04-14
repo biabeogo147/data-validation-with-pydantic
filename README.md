@@ -5,6 +5,7 @@ A static, open-source tutorial playground for learning **Pydantic** in the brows
 The app is intentionally scoped as a mini learning IDE:
 
 - exercises are defined in config, not hardcoded into the UI
+- every exercise validates data coming from a CSV file in the repo
 - Python runs fully client-side with **Pyodide**
 - no backend, no database, no auth
 - deploys cleanly to **GitHub Pages**
@@ -46,6 +47,7 @@ Every exercise can define:
 - `runConfig`
 - `checks`
 - `fileCsvConfig`
+- `visualizationConfig`
 - `hints`, `explanation`, `solutionCode`, `uiConfig`, and `learningConfig`
 
 When a learner clicks **Run**, the app:
@@ -53,15 +55,16 @@ When a learner clicks **Run**, the app:
 1. collects the learner's code for each placeholder
 2. injects it into the exercise template
 3. mounts any configured CSV fixtures into the Pyodide filesystem
-4. executes the assembled Python script
-5. evaluates checks and renders pass/fail output
+4. optionally walks through the CSV field-by-field in the teaching modal
+5. executes the assembled Python script against the CSV rows
+6. evaluates checks and renders pass/fail output
 
 ## Adding A New Exercise
 
 1. Add a new file under `src/data/exercises`.
 2. Export an `ExerciseDefinition`.
 3. Add it to `src/data/exercises/index.ts`.
-4. If the exercise needs CSV data, place the file under `public/fixtures` and reference it with `fileCsvPath`.
+4. Every exercise should provide CSV data under `public/fixtures` and reference it with `fileCsvPath`.
 
 Example:
 
@@ -92,7 +95,18 @@ export const myExercise: ExerciseDefinition = {
     },
   ],
   fileCsvConfig: {
-    files: [],
+    files: [
+      {
+        id: 'records',
+        fileCsvPath: 'fixtures/my-exercise.csv',
+      },
+    ],
+  },
+  visualizationConfig: {
+    modelClassName: 'A',
+    modelPlaceholderId: 'MODEL_A',
+    csvFileId: 'records',
+    fieldOrder: ['name'],
   },
 };
 ```
@@ -107,6 +121,8 @@ At runtime, the engine fetches each configured CSV file and mounts it into the P
 - mounted path in Python: `/data/users.csv`
 
 You can override the mounted path in `fileCsvConfig.files[].mountPath` if needed.
+
+The validation walkthrough modal also uses the CSV fixture directly. It animates every row and field in the file instead of using a separate hardcoded object sample.
 
 ## GitHub Pages
 

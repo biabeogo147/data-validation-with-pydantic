@@ -4,42 +4,28 @@ import { ExerciseEditor } from './components/editor/ExerciseEditor';
 import { ExerciseDetails } from './components/exercise/ExerciseDetails';
 import { ExerciseList } from './components/exercise/ExerciseList';
 import { RunOutput } from './components/output/RunOutput';
+import { ValidationVisualizerModal } from './components/output/ValidationVisualizerModal';
 import { useExercises } from './hooks/useExercises';
 import { useExerciseRunner } from './hooks/useExerciseRunner';
 import { useIsMobile } from './hooks/useIsMobile';
+import { useValidationVisualizer } from './hooks/useValidationVisualizer';
+import { createInitialExerciseSessionState } from './lib/exercise-session';
 import { getInitialPlaceholderValues } from './lib/template';
-import type { ExerciseDefinition, ExercisePlaceholderValues } from './types/exercise';
-
-function buildInitialDrafts(exercises: ExerciseDefinition[]) {
-  return Object.fromEntries(
-    exercises.map((exercise) => [exercise.id, getInitialPlaceholderValues(exercise)]),
-  ) as Record<string, ExercisePlaceholderValues>;
-}
-
-function buildInitialPlaceholderSelection(exercises: ExerciseDefinition[]) {
-  return Object.fromEntries(
-    exercises.map((exercise) => [exercise.id, exercise.placeholders[0]?.id ?? '']),
-  ) as Record<string, string>;
-}
 
 export default function App() {
   const { exercises } = useExercises();
   const isMobile = useIsMobile();
   const runner = useExerciseRunner();
-  const [selectedExerciseId, setSelectedExerciseId] = useState(
-    exercises[0]?.id ?? '',
+  const visualizer = useValidationVisualizer({
+    runExercise: runner.runExercise,
+  });
+  const [sessionState, setSessionState] = useState(() =>
+    createInitialExerciseSessionState(exercises),
   );
-  const [draftsByExerciseId, setDraftsByExerciseId] = useState(() =>
-    buildInitialDrafts(exercises),
-  );
-  const [activePlaceholderByExerciseId, setActivePlaceholderByExerciseId] =
-    useState(() => buildInitialPlaceholderSelection(exercises));
-  const [showSolutionByExerciseId, setShowSolutionByExerciseId] = useState<
-    Record<string, boolean>
-  >({});
 
   const selectedExercise =
-    exercises.find((exercise) => exercise.id === selectedExerciseId) ?? exercises[0];
+    exercises.find((exercise) => exercise.id === sessionState.selectedExerciseId) ??
+    exercises[0];
 
   if (!selectedExercise) {
     return (
@@ -58,16 +44,16 @@ export default function App() {
   }
 
   const currentValues =
-    draftsByExerciseId[selectedExercise.id] ??
+    sessionState.draftsByExerciseId[selectedExercise.id] ??
     getInitialPlaceholderValues(selectedExercise);
   const activePlaceholderId =
-    activePlaceholderByExerciseId[selectedExercise.id] ??
+    sessionState.activePlaceholderByExerciseId[selectedExercise.id] ??
     selectedExercise.placeholders[0]?.id;
   const activePlaceholder =
     selectedExercise.placeholders.find(
       (placeholder) => placeholder.id === activePlaceholderId,
     ) ?? selectedExercise.placeholders[0];
-  const showSolution = showSolutionByExerciseId[selectedExercise.id] ?? false;
+  const showSolution = sessionState.showSolutionByExerciseId[selectedExercise.id] ?? false;
 
   return (
     <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-50 sm:px-6 lg:px-8">
@@ -95,7 +81,11 @@ export default function App() {
             selectedExerciseId={selectedExercise.id}
             onSelect={(exerciseId) => {
               startTransition(() => {
-                setSelectedExerciseId(exerciseId);
+                setSessionState(
+                  createInitialExerciseSessionState(exercises, exerciseId),
+                );
+                visualizer.close();
+                runner.reset();
               });
             }}
           />
@@ -119,12 +109,16 @@ export default function App() {
                     className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-white/30 hover:bg-white/8"
                     type="button"
                     onClick={() => {
-                      setDraftsByExerciseId((currentDrafts) => ({
-                        ...currentDrafts,
-                        [selectedExercise.id]: getInitialPlaceholderValues(
-                          selectedExercise,
-                        ),
+                      setSessionState((currentSessionState) => ({
+                        ...currentSessionState,
+                        draftsByExerciseId: {
+                          ...currentSessionState.draftsByExerciseId,
+                          [selectedExercise.id]: getInitialPlaceholderValues(
+                            selectedExercise,
+                          ),
+                        },
                       }));
+                      visualizer.close();
                       runner.reset();
                     }}
                   >
@@ -134,9 +128,12 @@ export default function App() {
                     className="rounded-full border border-cyan-400/30 bg-cyan-500/12 px-4 py-2 text-sm text-cyan-100 transition hover:bg-cyan-500/20"
                     type="button"
                     onClick={() => {
-                      setShowSolutionByExerciseId((currentState) => ({
-                        ...currentState,
-                        [selectedExercise.id]: !showSolution,
+                      setSessionState((currentSessionState) => ({
+                        ...currentSessionState,
+                        showSolutionByExerciseId: {
+                          ...currentSessionState.showSolutionByExerciseId,
+                          [selectedExercise.id]: !showSolution,
+                        },
                       }));
                     }}
                   >
@@ -150,7 +147,7 @@ export default function App() {
                     }
                     type="button"
                     onClick={() => {
-                      void runner.runExercise(selectedExercise, currentValues);
+                      void visualizer.open(selectedExercise, currentValues);
                     }}
                   >
                     {selectedExercise.uiConfig?.runButtonLabel ?? 'Run'}
@@ -169,9 +166,12 @@ export default function App() {
                     }`}
                     type="button"
                     onClick={() => {
-                      setActivePlaceholderByExerciseId((currentState) => ({
-                        ...currentState,
-                        [selectedExercise.id]: placeholder.id,
+                      setSessionState((currentSessionState) => ({
+                        ...currentSessionState,
+                        activePlaceholderByExerciseId: {
+                          ...currentSessionState.activePlaceholderByExerciseId,
+                          [selectedExercise.id]: placeholder.id,
+                        },
                       }));
                     }}
                   >
@@ -187,12 +187,16 @@ export default function App() {
                   label={activePlaceholder.label ?? activePlaceholder.id}
                   value={currentValues[activePlaceholder.id] ?? ''}
                   onChange={(value) => {
-                    setDraftsByExerciseId((currentDrafts) => ({
-                      ...currentDrafts,
-                      [selectedExercise.id]: {
-                        ...(currentDrafts[selectedExercise.id] ??
-                          getInitialPlaceholderValues(selectedExercise)),
-                        [activePlaceholder.id]: value,
+                    setSessionState((currentSessionState) => ({
+                      ...currentSessionState,
+                      draftsByExerciseId: {
+                        ...currentSessionState.draftsByExerciseId,
+                        [selectedExercise.id]: {
+                          ...(currentSessionState.draftsByExerciseId[
+                            selectedExercise.id
+                          ] ?? getInitialPlaceholderValues(selectedExercise)),
+                          [activePlaceholder.id]: value,
+                        },
                       },
                     }));
                   }}
@@ -231,6 +235,17 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      <ValidationVisualizerModal
+        state={visualizer.state}
+        onClose={visualizer.close}
+        onSkip={() => {
+          void visualizer.skip();
+        }}
+        onStartPlayback={(speed) => {
+          void visualizer.startPlayback(speed);
+        }}
+      />
     </main>
   );
 }

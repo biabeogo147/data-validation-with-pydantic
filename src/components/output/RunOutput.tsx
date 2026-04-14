@@ -98,17 +98,6 @@ export function RunOutput({ state }: RunOutputProps) {
           </pre>
         </div>
       ) : null}
-
-      {state.result?.assembledCode ? (
-        <details className="mt-6 rounded-2xl border border-white/10 bg-slate-900/50 p-4">
-          <summary className="cursor-pointer text-sm font-semibold uppercase tracking-[0.22em] text-slate-200">
-            Inspect assembled Python
-          </summary>
-          <pre className="mt-4 overflow-x-auto rounded-2xl bg-slate-950/80 p-4 text-xs leading-6 text-slate-200">
-            {state.result.assembledCode}
-          </pre>
-        </details>
-      ) : null}
     </section>
   );
 }

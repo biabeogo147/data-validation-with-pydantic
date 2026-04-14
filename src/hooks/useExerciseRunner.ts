@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { executeExercise } from '../lib/exercise-runner';
 import { getRuntimeBasePath } from '../lib/github-pages';
@@ -36,11 +36,15 @@ const IDLE_STATE: ExerciseRunnerState = {
 
 export function useExerciseRunner() {
   const [state, setState] = useState<ExerciseRunnerState>(IDLE_STATE);
+  const activeRunIdRef = useRef(0);
 
   async function runExercise(
     exercise: ExerciseDefinition,
     values: ExercisePlaceholderValues,
   ) {
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
+
     setState({
       phase: 'booting',
       detail: STAGE_MESSAGES.booting,
@@ -52,6 +56,10 @@ export function useExerciseRunner() {
       values,
       (request) =>
         runExerciseInPyodide(request, (stage) => {
+          if (activeRunIdRef.current !== runId) {
+            return;
+          }
+
           setState((currentState) => ({
             ...currentState,
             phase: stage === 'running' ? 'running' : 'booting',
@@ -60,6 +68,10 @@ export function useExerciseRunner() {
         }),
       getRuntimeBasePath(),
     );
+
+    if (activeRunIdRef.current !== runId) {
+      return result;
+    }
 
     setState({
       phase: result.status,
@@ -74,6 +86,7 @@ export function useExerciseRunner() {
     state,
     runExercise,
     reset() {
+      activeRunIdRef.current += 1;
       setState(IDLE_STATE);
     },
   };

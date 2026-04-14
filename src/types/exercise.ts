@@ -60,6 +60,15 @@ export interface ExerciseLearningConfig {
   prerequisites?: string[];
 }
 
+export interface ExerciseVisualizationConfig {
+  modelClassName: string;
+  modelPlaceholderId: string;
+  csvFileId?: string;
+  fieldOrder?: string[];
+  title?: string;
+  description?: string;
+}
+
 export interface ExerciseDefinition {
   id: string;
   title: string;
@@ -78,6 +87,7 @@ export interface ExerciseDefinition {
   visible?: boolean;
   uiConfig?: ExerciseUiConfig;
   learningConfig?: ExerciseLearningConfig;
+  visualizationConfig?: ExerciseVisualizationConfig;
 }
 
 export type ExercisePlaceholderValues = Record<string, string>;
