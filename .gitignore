@@ -1,0 +1,12 @@
+node_modules
+dist
+.npm-cache
+.DS_Store
+coverage
+.idea
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+vitest.config.js
+vitest.config.d.ts
+.superpowers
