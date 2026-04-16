@@ -37,6 +37,7 @@ export interface ExerciseCsvFile {
   id: string;
   fileCsvPath: string;
   mountPath?: string;
+  previewColumns?: string[];
 }
 
 export interface ExerciseFileCsvConfig {

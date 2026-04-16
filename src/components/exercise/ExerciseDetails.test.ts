@@ -32,12 +32,14 @@ const exercise: ExerciseDefinition = {
 };
 
 describe('ExerciseDetails', () => {
-  it('renders the example output and CSV preview entry point', () => {
+  it('renders the example output and always-visible CSV preview section', () => {
     const markup = renderToStaticMarkup(ExerciseDetails({ exercise }));
 
     expect(markup).toContain('Example output');
     expect(markup).toContain('valid_count');
     expect(markup).toContain('Broken');
-    expect(markup).toContain('View CSV');
+    expect(markup).toContain('CSV Preview');
+    expect(markup).not.toContain('View CSV');
+    expect(markup).not.toContain('Hide CSV');
   });
 });

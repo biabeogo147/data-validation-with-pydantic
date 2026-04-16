@@ -26,22 +26,6 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
         {exercise.description}
       </p>
 
-      {exercise.example ? (
-        <div className="mt-6">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            {exercise.example.title ?? 'Example output'}
-          </h2>
-          {exercise.example.description ? (
-            <p className="mt-3 text-sm leading-6 text-slate-400">
-              {exercise.example.description}
-            </p>
-          ) : null}
-          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-xs leading-6 text-cyan-50">
-            {exercise.example.code}
-          </pre>
-        </div>
-      ) : null}
-
       {exercise.learningConfig?.objectives?.length ? (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
@@ -73,6 +57,23 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
       ) : null}
 
       <CsvPreviewPanel exercise={exercise} />
+
+      {exercise.example ? (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
+            {exercise.example.title ?? 'Example output'}
+          </h2>
+          {exercise.example.description ? (
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              {exercise.example.description}
+            </p>
+          ) : null}
+          <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-xs leading-6 text-cyan-50">
+            {exercise.example.code}
+          </pre>
+        </div>
+      ) : null}
+
     </section>
   );
 }
