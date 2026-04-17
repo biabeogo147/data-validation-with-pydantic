@@ -238,7 +238,7 @@ describe('buildVisualizationRequest', () => {
     ).toThrow(/CSV/i);
   });
 
-  it('generates per-field visualization code that preserves field validators when no model validators are present', () => {
+  it('builds field-step validation from the compiled Pydantic field schema instead of reconstructing a field-only model', () => {
     const request = buildVisualizationRequest(
       {
         ...exercise,
@@ -263,10 +263,50 @@ describe('buildVisualizationRequest', () => {
       },
     );
 
-    expect(request.pythonSource).toContain('from typing import Any');
-    expect(request.pythonSource).toContain('__base__=__model');
-    expect(request.pythonSource).toContain('for __name in __model.model_fields');
-    expect(request.pythonSource).toContain('__name != __field');
+    expect(request.pythonSource).toContain(
+      'from pydantic_core import SchemaSerializer, SchemaValidator',
+    );
+    expect(request.pythonSource).toContain(
+      'def __get_visualizer_field_schema(__model, __field):',
+    );
+    expect(request.pythonSource).toContain(
+      '__field: SchemaValidator(__visualizer_field_schemas[__field])',
+    );
+    expect(request.pythonSource).toContain(
+      '__field: SchemaSerializer(__visualizer_field_schemas[__field])',
+    );
+  });
+
+  it('serializes validated field and row values in json mode for browser-safe visualization output', () => {
+    const request = buildVisualizationRequest(
+      {
+        ...exercise,
+        templateCode: [
+          'from pydantic import BaseModel, HttpUrl',
+          '',
+          '{{MODEL_A}}',
+          '',
+          'print("done")',
+        ].join('\n'),
+        visualizationConfig: {
+          ...exercise.visualizationConfig!,
+          fieldOrder: ['img_link'],
+        },
+      },
+      {
+        MODEL_A: [
+          'class A(BaseModel):',
+          '    img_link: HttpUrl',
+        ].join('\n'),
+      },
+    );
+
+    expect(request.pythonSource).toContain(
+      '__validated_value = __visualizer_field_serializers[__field].to_python(',
+    );
+    expect(request.pythonSource).toContain(
+      '"validatedRow": __validated_row.model_dump(mode="json")',
+    );
   });
 });
 
