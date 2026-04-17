@@ -78,7 +78,7 @@ export interface ExerciseDefinition {
   tags?: string[];
   templateCode: string;
   placeholders: ExercisePlaceholder[];
-  runConfig: ExerciseRunConfig;
+  runConfig?: ExerciseRunConfig;
   checks: ExerciseCheckDefinition[];
   fileCsvConfig: ExerciseFileCsvConfig;
   hints?: string[];

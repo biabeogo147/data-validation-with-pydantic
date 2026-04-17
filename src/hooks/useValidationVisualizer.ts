@@ -80,7 +80,7 @@ async function executeVisualizationRequest(
       code: request.pythonSource,
       packages: uniquePackages([
         'pydantic',
-        ...(exercise.runConfig.pythonPackages ?? []),
+        ...(exercise.runConfig?.pythonPackages ?? []),
       ]),
       fixtures: getFixtureMounts(exercise, getRuntimeBasePath()),
     },

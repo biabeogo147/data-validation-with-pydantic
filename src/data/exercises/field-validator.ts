@@ -64,9 +64,6 @@ export const fieldValidatorExercise: ExerciseDefinition = {
       ),
     },
   ],
-  runConfig: {
-    pythonPackages: ['pydantic'],
-  },
   checks: [
     {
       id: 'field-validator-counts',
@@ -192,7 +189,6 @@ export const fieldValidatorExercise: ExerciseDefinition = {
   visualizationConfig: {
     modelClassName: 'AmazonPricingRecord',
     modelPlaceholderId: 'MODEL_SCHEMA',
-    csvFileId: 'products',
     fieldOrder: [
       'product_id',
       'category',

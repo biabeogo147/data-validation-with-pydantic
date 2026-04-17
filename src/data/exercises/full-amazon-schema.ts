@@ -70,9 +70,6 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
       defaultCode: ['class AmazonProductRow(BaseModel):', '    pass'].join('\n'),
     },
   ],
-  runConfig: {
-    pythonPackages: ['pydantic'],
-  },
   checks: [
     {
       id: 'full-schema-counts',
@@ -258,7 +255,6 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
   visualizationConfig: {
     modelClassName: 'AmazonProductRow',
     modelPlaceholderId: 'MODEL_SCHEMA',
-    csvFileId: 'products',
     fieldOrder: [
       'product_id',
       'product_name',

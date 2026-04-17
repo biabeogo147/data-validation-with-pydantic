@@ -9,7 +9,7 @@ import type {
   ExerciseRunResult,
 } from '../types/exercise';
 
-export interface ExerciseRunnerState {
+interface ExerciseRunnerState {
   phase: 'idle' | 'booting' | 'running' | 'pass' | 'fail' | 'error';
   detail: string;
   result: ExerciseRunResult | null;

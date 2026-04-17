@@ -82,6 +82,36 @@ describe('exercise runner orchestration', () => {
     ]);
   });
 
+  it('defaults to the built-in pydantic runtime when runConfig is omitted', async () => {
+    const adapter = vi.fn().mockResolvedValue({
+      stdout: 'loaded',
+      stderr: '',
+    });
+
+    const result = await executeExercise(
+      {
+        ...exercise,
+        runConfig: undefined,
+      },
+      { MODEL_CODE: 'class User: pass' },
+      adapter,
+    );
+
+    expect(adapter).toHaveBeenCalledWith({
+      code: ['class User: pass', '', 'print("loaded")'].join('\n'),
+      packages: ['pydantic'],
+      fixtures: [
+        {
+          id: 'users',
+          fileCsvPath: 'fixtures/users.csv',
+          publicUrl: '/fixtures/users.csv',
+          mountPath: '/data/users.csv',
+        },
+      ],
+    });
+    expect(result.status).toBe('pass');
+  });
+
   it('reports a failing run result when a check fails', async () => {
     const adapter = vi.fn().mockResolvedValue({
       stdout: 'missing-marker',

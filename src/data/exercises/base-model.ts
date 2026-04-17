@@ -63,9 +63,6 @@ export const baseModelExercise: ExerciseDefinition = {
       defaultCode: ['class ProductReview(BaseModel):', '    pass'].join('\n'),
     },
   ],
-  runConfig: {
-    pythonPackages: ['pydantic'],
-  },
   checks: [
     {
       id: 'base-model-counts',
@@ -145,9 +142,7 @@ export const baseModelExercise: ExerciseDefinition = {
   visualizationConfig: {
     modelClassName: 'ProductReview',
     modelPlaceholderId: 'MODEL_SCHEMA',
-    csvFileId: 'products',
     fieldOrder: ['product_id', 'product_name', 'rating'],
-    visibleColumns: ['product_id', 'product_name', 'rating'],
     maxVisualizedRows: 4,
   },
 };

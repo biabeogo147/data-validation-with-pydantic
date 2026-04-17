@@ -103,7 +103,7 @@ function buildExecutableCode(
   values: ExercisePlaceholderValues,
 ): string {
   const parts = [
-    exercise.runConfig.bootstrapCode?.trim(),
+    exercise.runConfig?.bootstrapCode?.trim(),
     assembleExerciseCode(exercise, values).trim(),
     buildPythonAssertCheckBlock(exercise.checks)?.trim(),
   ].filter((part): part is string => Boolean(part));
@@ -135,7 +135,10 @@ export async function executeExercise(
 ): Promise<ExerciseRunResult> {
   const executableCode = buildExecutableCode(exercise, values);
   const fixtures = getFixtureMounts(exercise, basePath);
-  const packages = uniquePackages(['pydantic', ...(exercise.runConfig.pythonPackages ?? [])]);
+  const packages = uniquePackages([
+    'pydantic',
+    ...(exercise.runConfig?.pythonPackages ?? []),
+  ]);
 
   try {
     const execution = await adapter({

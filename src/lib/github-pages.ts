@@ -1,6 +1,6 @@
 const ABSOLUTE_URL_PATTERN = /^(?:[a-z]+:)?\/\//i;
 
-export function normalizeBasePath(basePath: string = '/'): string {
+function normalizeBasePath(basePath: string = '/'): string {
   const normalized = basePath.trim() || '/';
   const withLeadingSlash = normalized.startsWith('/')
     ? normalized

@@ -170,6 +170,41 @@ describe('buildVisualizationRequest', () => {
     );
   });
 
+  it('falls back to the validated field sequence when visibleColumns is omitted', () => {
+    const request = buildVisualizationRequest(
+      {
+        ...exercise,
+        visualizationConfig: {
+          ...exercise.visualizationConfig!,
+          visibleColumns: undefined,
+        },
+      },
+      {
+        MODEL_A: ['class A(BaseModel):', '    name: str', '    age: int'].join('\n'),
+      },
+    );
+
+    expect(request.fieldSequence).toEqual(['name', 'age']);
+    expect(request.visibleColumns).toEqual(['name', 'age']);
+  });
+
+  it('falls back to the first CSV file when csvFileId is omitted', () => {
+    const request = buildVisualizationRequest(
+      {
+        ...exercise,
+        visualizationConfig: {
+          ...exercise.visualizationConfig!,
+          csvFileId: undefined,
+        },
+      },
+      {
+        MODEL_A: ['class A(BaseModel):', '    name: str', '    age: int'].join('\n'),
+      },
+    );
+
+    expect(request.csvMountPath).toBe('/data/people.csv');
+  });
+
   it('fails when the requested model placeholder does not exist', () => {
     expect(() =>
       buildVisualizationRequest(

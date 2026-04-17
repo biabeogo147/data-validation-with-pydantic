@@ -45,14 +45,6 @@ export interface VisualizationRowResult {
   errors: string[];
 }
 
-export type VisualizationPlaybackStatus =
-  | 'closed'
-  | 'choice'
-  | 'loading'
-  | 'playing'
-  | 'complete'
-  | 'error';
-
 function countCharacters(value: string, targetCharacter: string) {
   return Array.from(value).filter((character) => character === targetCharacter)
     .length;
@@ -528,7 +520,7 @@ export function getVisibleRowResults(
   rowResults: VisualizationRowResult[],
   steps: VisualizationStep[],
   currentStepIndex: number,
-  status: VisualizationPlaybackStatus,
+  status: 'closed' | 'choice' | 'loading' | 'playing' | 'complete' | 'error',
 ): VisualizationRowResult[] {
   if (status === 'complete') {
     return rowResults;

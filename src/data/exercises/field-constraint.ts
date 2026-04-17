@@ -73,9 +73,6 @@ export const fieldConstraintExercise: ExerciseDefinition = {
       ),
     },
   ],
-  runConfig: {
-    pythonPackages: ['pydantic'],
-  },
   checks: [
     {
       id: 'field-constraint-counts',
@@ -166,9 +163,7 @@ export const fieldConstraintExercise: ExerciseDefinition = {
   visualizationConfig: {
     modelClassName: 'AmazonListingConstrained',
     modelPlaceholderId: 'MODEL_SCHEMA',
-    csvFileId: 'products',
     fieldOrder: ['product_id', 'product_name', 'category', 'rating'],
-    visibleColumns: ['product_id', 'product_name', 'category', 'rating'],
     maxVisualizedRows: 4,
   },
 };
