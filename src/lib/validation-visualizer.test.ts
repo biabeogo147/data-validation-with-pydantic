@@ -62,11 +62,78 @@ describe('findModelFieldHighlights', () => {
         fieldName: 'name',
         startLine: 2,
         endLine: 2,
+        ranges: [
+          {
+            startLine: 2,
+            endLine: 2,
+          },
+        ],
       },
       age: {
         fieldName: 'age',
         startLine: 3,
         endLine: 3,
+        ranges: [
+          {
+            startLine: 3,
+            endLine: 3,
+          },
+        ],
+      },
+    });
+  });
+
+  it('includes related field-validator blocks for the active field highlight', () => {
+    expect(
+      findModelFieldHighlights(
+        [
+          'class AmazonPricingRecord(BaseModel):',
+          '    product_id: str',
+          '    category: list[str]',
+          '    discounted_price: float',
+          '',
+          '    @field_validator("category", mode="before")',
+          '    @classmethod',
+          '    def parse_category(cls, value: str) -> list[str]:',
+          '        return [part.strip() for part in str(value).split("|") if part.strip()]',
+          '',
+          '    @field_validator("discounted_price", mode="before")',
+          '    @classmethod',
+          '    def parse_price(cls, value: str) -> float:',
+          '        return 1.0',
+        ].join('\n'),
+        ['category', 'discounted_price'],
+      ),
+    ).toEqual({
+      category: {
+        fieldName: 'category',
+        startLine: 3,
+        endLine: 9,
+        ranges: [
+          {
+            startLine: 3,
+            endLine: 3,
+          },
+          {
+            startLine: 6,
+            endLine: 9,
+          },
+        ],
+      },
+      discounted_price: {
+        fieldName: 'discounted_price',
+        startLine: 4,
+        endLine: 14,
+        ranges: [
+          {
+            startLine: 4,
+            endLine: 4,
+          },
+          {
+            startLine: 11,
+            endLine: 14,
+          },
+        ],
       },
     });
   });
@@ -87,6 +154,12 @@ describe('buildVisualizationRequest', () => {
       fieldName: 'age',
       startLine: 3,
       endLine: 3,
+      ranges: [
+        {
+          startLine: 3,
+          endLine: 3,
+        },
+      ],
     });
     expect(request.pythonSource).toContain('csv.DictReader');
     expect(request.pythonSource).toContain('/data/people.csv');
@@ -128,6 +201,37 @@ describe('buildVisualizationRequest', () => {
         },
       ),
     ).toThrow(/CSV/i);
+  });
+
+  it('generates per-field visualization code that preserves field validators when no model validators are present', () => {
+    const request = buildVisualizationRequest(
+      {
+        ...exercise,
+        templateCode: [
+          'from pydantic import BaseModel, field_validator',
+          '',
+          '{{MODEL_A}}',
+          '',
+          'print("done")',
+        ].join('\n'),
+      },
+      {
+        MODEL_A: [
+          'class A(BaseModel):',
+          '    rating_count: int',
+          '',
+          '    @field_validator("rating_count", mode="before")',
+          '    @classmethod',
+          '    def parse_rating_count(cls, value):',
+          '        return int(str(value).replace(",", ""))',
+        ].join('\n'),
+      },
+    );
+
+    expect(request.pythonSource).toContain('from typing import Any');
+    expect(request.pythonSource).toContain('__base__=__model');
+    expect(request.pythonSource).toContain('for __name in __model.model_fields');
+    expect(request.pythonSource).toContain('__name != __field');
   });
 });
 

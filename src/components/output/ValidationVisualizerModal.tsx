@@ -1,5 +1,6 @@
 import {
   getVisibleRowResults,
+  type ModelFieldHighlight,
 } from '../../lib/validation-visualizer';
 import type {
   ValidationVisualizerState,
@@ -14,6 +15,17 @@ interface ValidationVisualizerModalProps {
   onStartPlayback: (speed: VisualizationPlaybackSpeed) => void;
 }
 
+interface CodeSnippetLine {
+  type: 'line';
+  lineNumber: number;
+  content: string;
+}
+
+interface CodeSnippetGap {
+  type: 'gap';
+  key: string;
+}
+
 function formatValue(value: unknown) {
   const clippedValue = clipValue(value);
 
@@ -25,26 +37,45 @@ function formatValue(value: unknown) {
 }
 
 const valuePreClassName =
-  'mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-slate-100';
+  'mt-2 max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-all text-sm leading-6 text-slate-100';
+const currentRowValueTextClassName =
+  'mt-2 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm leading-6 text-slate-100';
 
 const MAX_PREVIEW_STRING_LENGTH = 120;
+const MAX_CURRENT_ROW_STRING_LENGTH = 72;
+const CURRENT_ROW_FULL_WIDTH_THRESHOLD = 60;
+const CURRENT_ROW_FULL_WIDTH_LABEL_THRESHOLD = 10;
+const MAX_FULL_MODEL_CODE_LINES = 10;
 
-function clipValue(value: unknown): unknown {
+function formatCurrentRowValue(value: unknown) {
+  const clippedValue = clipValue(value, MAX_CURRENT_ROW_STRING_LENGTH);
+
   if (typeof value === 'string') {
-    return value.length > MAX_PREVIEW_STRING_LENGTH
-      ? `${value.slice(0, MAX_PREVIEW_STRING_LENGTH - 3)}...`
+    return JSON.stringify(clippedValue);
+  }
+
+  return JSON.stringify(clippedValue, null, 2) ?? 'null';
+}
+
+function clipValue(
+  value: unknown,
+  maxStringLength: number = MAX_PREVIEW_STRING_LENGTH,
+): unknown {
+  if (typeof value === 'string') {
+    return value.length > maxStringLength
+      ? `${value.slice(0, maxStringLength - 3)}...`
       : value;
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => clipValue(item));
+    return value.map((item) => clipValue(item, maxStringLength));
   }
 
   if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
         key,
-        clipValue(item),
+        clipValue(item, maxStringLength),
       ]),
     );
   }
@@ -90,6 +121,26 @@ function getDisplayColumns(
   };
 }
 
+function getCurrentRowDisplayColumns(
+  rawRows: Record<string, string>[],
+  request: ValidationVisualizerState['request'],
+) {
+  const availableColumns = rawRows[0]
+    ? Object.keys(rawRows[0])
+    : request?.fieldSequence ?? [];
+  const prioritizedColumns = request
+    ? [...request.fieldSequence, ...(request.visibleColumns ?? [])]
+    : availableColumns;
+  const visibleColumns = Array.from(new Set(prioritizedColumns.filter(Boolean))).filter(
+    (column) => availableColumns.length === 0 || availableColumns.includes(column),
+  );
+
+  return {
+    visibleColumns: visibleColumns.length > 0 ? visibleColumns : availableColumns,
+    totalColumns: availableColumns.length > 0 ? availableColumns.length : visibleColumns.length,
+  };
+}
+
 function getRunStatusBadgeClasses(status: 'running' | ExerciseRunResult['status']) {
   switch (status) {
     case 'pass':
@@ -103,6 +154,105 @@ function getRunStatusBadgeClasses(status: 'running' | ExerciseRunResult['status'
   }
 }
 
+function getHighlightRanges(
+  highlight: ModelFieldHighlight | null | undefined,
+) {
+  if (!highlight) {
+    return [];
+  }
+
+  if ('ranges' in highlight && Array.isArray(highlight.ranges) && highlight.ranges.length) {
+    return highlight.ranges;
+  }
+
+  return [
+    {
+      startLine: highlight.startLine,
+      endLine: highlight.endLine,
+    },
+  ];
+}
+
+function buildCodeSnippet(
+  codeLines: string[],
+  highlight: ModelFieldHighlight | null | undefined,
+): Array<CodeSnippetLine | CodeSnippetGap> {
+  if (codeLines.length <= MAX_FULL_MODEL_CODE_LINES) {
+    return codeLines.map((content, index) => ({
+      type: 'line',
+      lineNumber: index + 1,
+      content,
+    }));
+  }
+
+  const ranges = getHighlightRanges(highlight);
+
+  if (ranges.length === 0) {
+    return codeLines.map((content, index) => ({
+      type: 'line',
+      lineNumber: index + 1,
+      content,
+    }));
+  }
+
+  const snippet: Array<CodeSnippetLine | CodeSnippetGap> = [];
+
+  ranges.forEach((range, rangeIndex) => {
+    if (rangeIndex > 0) {
+      snippet.push({
+        type: 'gap',
+        key: `gap-${range.startLine}-${range.endLine}`,
+      });
+    }
+
+    for (let lineNumber = range.startLine; lineNumber <= range.endLine; lineNumber += 1) {
+      snippet.push({
+        type: 'line',
+        lineNumber,
+        content: codeLines[lineNumber - 1] ?? '',
+      });
+    }
+  });
+
+  return snippet;
+}
+
+function getFocusedWalkthroughRowIndex({
+  rawRows,
+  currentStep,
+}: {
+  rawRows: Record<string, string>[];
+  currentStep: ValidationVisualizerState['steps'][number] | null;
+}) {
+  if (rawRows.length === 0) {
+    return -1;
+  }
+
+  if (currentStep) {
+    return Math.min(currentStep.rowIndex, rawRows.length - 1);
+  }
+
+  return 0;
+}
+
+function shouldRenderCurrentRowValueFullWidth(value: unknown) {
+  if (typeof value === 'string') {
+    return value.length > CURRENT_ROW_FULL_WIDTH_THRESHOLD;
+  }
+
+  const serializedValue =
+    value === null || value === undefined ? '' : JSON.stringify(value);
+
+  return (serializedValue?.length ?? 0) > CURRENT_ROW_FULL_WIDTH_THRESHOLD;
+}
+
+function shouldRenderCurrentRowCardFullWidth(column: string, value: unknown) {
+  return (
+    column.length >= CURRENT_ROW_FULL_WIDTH_LABEL_THRESHOLD ||
+    shouldRenderCurrentRowValueFullWidth(value)
+  );
+}
+
 function renderExerciseResultSection({
   detail,
   result,
@@ -113,7 +263,7 @@ function renderExerciseResultSection({
   const status = result?.status ?? 'running';
 
   return (
-    <section className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
+    <section className="mt-8 min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
@@ -207,15 +357,26 @@ function renderWholeFileResultSection({
   const displayedRowResults =
     maxDisplayedRows === null ? rowResults : rowResults.slice(0, maxDisplayedRows);
   const passedRows = rowResults.filter((rowResult) => rowResult.passed).length;
-  const failedRows = rowResults.filter((rowResult) => !rowResult.passed).length;
+  const failedRowResults = rowResults.filter((rowResult) => !rowResult.passed);
+  const failedRows = failedRowResults.length;
+  const displayedFailedRowResults =
+    maxDisplayedRows === null
+      ? failedRowResults
+      : failedRowResults.slice(0, maxDisplayedRows);
   const hiddenPreviewCount =
     maxDisplayedRows !== null && totalRows > maxDisplayedRows
       ? totalRows - maxDisplayedRows
       : 0;
   const hiddenPreviewLabel = hiddenPreviewCount === 1 ? 'row' : 'rows';
+  const hiddenFailedPreviewCount =
+    displayedFailedRowResults.length < failedRows
+      ? failedRows - displayedFailedRowResults.length
+      : 0;
+  const hiddenFailedPreviewLabel =
+    hiddenFailedPreviewCount === 1 ? 'row' : 'rows';
 
   return (
-    <section className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
+    <section className="mt-8 min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
@@ -255,7 +416,7 @@ function renderWholeFileResultSection({
             return (
               <article
                 key={`row-result-${rowResult.rowIndex}`}
-                className={`rounded-3xl border p-5 ${
+                className={`min-w-0 rounded-3xl border p-5 ${
                   rowResult.passed
                     ? 'border-emerald-400/20 bg-emerald-500/8'
                     : 'border-amber-400/20 bg-amber-500/8'
@@ -276,8 +437,8 @@ function renderWholeFileResultSection({
                   </span>
                 </div>
 
-                <div className="mt-4 grid gap-3">
-                  <div className="rounded-2xl bg-slate-950/70 p-4">
+                <div className="mt-4 grid min-w-0 gap-3">
+                  <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                       Raw CSV row
                     </p>
@@ -286,7 +447,7 @@ function renderWholeFileResultSection({
                     </pre>
                   </div>
 
-                  <div className="rounded-2xl bg-slate-950/70 p-4">
+                  <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                       Validation result
                     </p>
@@ -302,7 +463,7 @@ function renderWholeFileResultSection({
           })}
 
           {hiddenPreviewCount > 0 ? (
-            <article className="rounded-3xl border border-dashed border-white/15 bg-slate-950/45 p-5">
+            <article className="min-w-0 rounded-3xl border border-dashed border-white/15 bg-slate-950/45 p-5">
               <p className="text-4xl font-semibold tracking-[0.2em] text-slate-300">
                 ...
               </p>
@@ -319,6 +480,79 @@ function renderWholeFileResultSection({
           {emptyMessage}
         </div>
       )}
+
+      {failedRows > 0 ? (
+        <div className="mt-6 rounded-3xl border border-amber-400/20 bg-amber-500/8 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-amber-200">
+                Failed Rows
+              </p>
+              <h4 className="mt-3 text-lg font-semibold text-white">
+                Rows that raised validation errors
+              </h4>
+            </div>
+            <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
+              Showing {displayedFailedRowResults.length} / {failedRows} failed rows
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            {displayedFailedRowResults.map((rowResult) => {
+              const rawRow = rawRows[rowResult.rowIndex];
+              const filteredRawRow = filterRecordColumns(rawRow, visibleColumns);
+
+              return (
+                <article
+                  key={`failed-row-${rowResult.rowIndex}`}
+                  className="min-w-0 rounded-3xl border border-amber-400/20 bg-slate-950/65 p-5"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-base font-semibold text-white">
+                      Row {rowResult.rowIndex + 1}
+                    </p>
+                    <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs uppercase tracking-[0.22em] text-amber-100">
+                      invalid
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid min-w-0 gap-3">
+                    <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Raw CSV row
+                      </p>
+                      <pre className={valuePreClassName}>
+                        {formatValue(filteredRawRow)}
+                      </pre>
+                    </div>
+
+                    <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                        Validation errors
+                      </p>
+                      <pre className={valuePreClassName}>
+                        {formatValue(rowResult.errors)}
+                      </pre>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+
+            {hiddenFailedPreviewCount > 0 ? (
+              <article className="min-w-0 rounded-3xl border border-dashed border-amber-400/20 bg-slate-950/55 p-5">
+                <p className="text-4xl font-semibold tracking-[0.2em] text-amber-100">
+                  ...
+                </p>
+                <p className="mt-4 text-sm leading-7 text-amber-50/90">
+                  ... {hiddenFailedPreviewCount} more failed {hiddenFailedPreviewLabel}{' '}
+                  are hidden from this preview.
+                </p>
+              </article>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -421,10 +655,14 @@ export function ValidationVisualizerModal({
     const { visibleColumns } = getDisplayColumns(state.rawRows, state.request);
     const pendingRows = Math.max(state.rawRows.length - state.rowResults.length, 0);
     const maxDisplayedRows = state.request?.maxVisualizedRows ?? null;
+    const directStatus =
+      state.runResult?.status ??
+      (state.status === 'error' ? 'error' : 'running');
+    const directErrorMessage = state.error ?? state.runResult?.stderr ?? null;
 
     return (
       <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 px-4 py-6 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/60">
+        <div className="mx-auto w-full max-w-[1800px] rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/60">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">
               <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
@@ -438,14 +676,29 @@ export function ValidationVisualizerModal({
               </p>
             </div>
 
-            <button
-              className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/5"
-              type="button"
-              onClick={onClose}
-            >
-              Close
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.24em] ${getRunStatusBadgeClasses(
+                  directStatus,
+                )}`}
+              >
+                {directStatus}
+              </span>
+              <button
+                className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/5"
+                type="button"
+                onClick={onClose}
+              >
+                Close
+              </button>
+            </div>
           </div>
+
+          {directErrorMessage ? (
+            <div className="mt-6 rounded-3xl border border-rose-400/20 bg-rose-950/35 p-5 text-sm leading-7 text-rose-100">
+              {directErrorMessage}
+            </div>
+          ) : null}
 
           {renderWholeFileResultSection({
             rawRows: state.rawRows,
@@ -456,11 +709,6 @@ export function ValidationVisualizerModal({
             maxDisplayedRows,
             emptyMessage:
               'The row-level results will appear here as soon as the direct validation finishes.',
-          })}
-
-          {renderExerciseResultSection({
-            detail: state.detail,
-            result: state.runResult,
           })}
         </div>
       </div>
@@ -503,7 +751,12 @@ export function ValidationVisualizerModal({
     ? state.request.highlights[currentStep.fieldName]
     : null;
   const codeLines = state.request.modelCode.split('\n');
-  const { visibleColumns: csvColumns, totalColumns } = getDisplayColumns(
+  const codeSnippet = buildCodeSnippet(codeLines, activeHighlight);
+  const { visibleColumns: resultColumns } = getDisplayColumns(
+    state.rawRows,
+    state.request,
+  );
+  const { visibleColumns: csvColumns, totalColumns } = getCurrentRowDisplayColumns(
     state.rawRows,
     state.request,
   );
@@ -521,10 +774,14 @@ export function ValidationVisualizerModal({
     state.request.maxVisualizedRows === null
       ? state.rawRows.length
       : Math.min(state.request.maxVisualizedRows, state.rawRows.length);
-  const displayedRawRows =
-    state.request.maxVisualizedRows === null
-      ? state.rawRows
-      : state.rawRows.slice(0, state.request.maxVisualizedRows);
+  const focusedRowIndex = getFocusedWalkthroughRowIndex({
+    rawRows: state.rawRows,
+    currentStep,
+  });
+  const focusedRawRow =
+    focusedRowIndex >= 0 ? state.rawRows[focusedRowIndex] : null;
+  const focusedRowResult =
+    focusedRowIndex >= 0 ? rowResultMap.get(focusedRowIndex) : undefined;
   const shouldShowExerciseResult =
     Boolean(state.runResult) ||
     (state.mode === 'walkthrough' &&
@@ -593,8 +850,8 @@ export function ValidationVisualizerModal({
           })}
         </div>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-[1.15fr_1.35fr_0.9fr]">
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+        <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
+          <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
               Validated Output
             </p>
@@ -612,7 +869,7 @@ export function ValidationVisualizerModal({
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-base font-semibold text-white">
-                    Row {currentStep.rowIndex + 1} · {currentStep.fieldName}
+                    Row {currentStep.rowIndex + 1} - {currentStep.fieldName}
                   </p>
                   <span
                     className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
@@ -629,8 +886,8 @@ export function ValidationVisualizerModal({
                   {currentStep.message}
                 </p>
 
-                <div className="mt-4 grid gap-3">
-                  <div className="rounded-2xl bg-slate-950/70 p-4">
+                <div className="mt-4 grid min-w-0 gap-3">
+                  <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                       Raw value
                     </p>
@@ -639,7 +896,7 @@ export function ValidationVisualizerModal({
                     </pre>
                   </div>
 
-                  <div className="rounded-2xl bg-slate-950/70 p-4">
+                  <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
                       Pydantic output
                     </p>
@@ -658,7 +915,7 @@ export function ValidationVisualizerModal({
             )}
           </section>
 
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+          <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
               Pydantic Class
             </p>
@@ -667,25 +924,36 @@ export function ValidationVisualizerModal({
             </h3>
 
             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/85">
-              {codeLines.map((line, index) => {
-                const lineNumber = index + 1;
-                const isActive =
-                  activeHighlight &&
-                  lineNumber >= activeHighlight.startLine &&
-                  lineNumber <= activeHighlight.endLine;
+              {codeSnippet.map((item) => {
+                if (item.type === 'gap') {
+                  return (
+                    <div
+                      key={item.key}
+                      className="border-y border-white/6 bg-slate-900/75 px-4 py-2 text-center text-xs uppercase tracking-[0.24em] text-slate-500"
+                    >
+                      Related code continues below
+                    </div>
+                  );
+                }
+
+                const isActive = getHighlightRanges(activeHighlight).some(
+                  (range) =>
+                    item.lineNumber >= range.startLine &&
+                    item.lineNumber <= range.endLine,
+                );
 
                 return (
                   <div
-                    key={`${lineNumber}-${line}`}
+                    key={`${item.lineNumber}-${item.content}`}
                     className={`grid grid-cols-[44px_minmax(0,1fr)] gap-4 px-4 py-2 font-mono text-sm leading-7 ${
                       isActive
                         ? 'bg-cyan-500/14 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.32)]'
                         : 'bg-transparent'
                     }`}
                   >
-                    <span className="text-right text-slate-500">{lineNumber}</span>
+                    <span className="text-right text-slate-500">{item.lineNumber}</span>
                     <span className={isActive ? 'text-cyan-50' : 'text-slate-200'}>
-                      {line || ' '}
+                      {item.content || ' '}
                     </span>
                   </div>
                 );
@@ -693,96 +961,103 @@ export function ValidationVisualizerModal({
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+          <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
                   Raw Input
                 </p>
                 <h3 className="mt-3 text-xl font-semibold text-white">
-                  Full CSV input
+                  Current CSV row
                 </h3>
               </div>
               <div className="flex flex-wrap gap-3">
-                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-                  Showing {displayedRawRows.length} / {state.rawRows.length} rows
-                </span>
+                {focusedRowIndex >= 0 ? (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+                    Row {focusedRowIndex + 1} in focus
+                  </span>
+                ) : null}
                 <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
                   Showing {csvColumns.length} / {totalColumns} columns
                 </span>
               </div>
             </div>
 
-            <div className="mt-5 overflow-x-auto">
-              <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/85">
-                <div
-                  className="grid border-b border-white/10 bg-slate-900/80"
-                  style={{
-                    gridTemplateColumns: `72px repeat(${csvColumns.length}, minmax(180px, 1fr))`,
-                  }}
-                >
-                  <div className="px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Row
-                  </div>
-                  {csvColumns.map((column) => (
-                    <div
-                      key={column}
-                      className="min-w-0 truncate px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-400"
-                      title={column}
-                    >
-                      {column}
-                    </div>
-                  ))}
+            {focusedRawRow ? (
+              <div className="mt-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-base font-semibold text-white">
+                    Row {focusedRowIndex + 1} in focus
+                  </p>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
+                      focusedRowResult
+                        ? focusedRowResult.passed
+                          ? 'bg-emerald-500/15 text-emerald-100'
+                          : 'bg-amber-500/15 text-amber-100'
+                        : 'bg-white/10 text-slate-300'
+                    }`}
+                  >
+                    {focusedRowResult
+                      ? focusedRowResult.passed
+                        ? 'row complete'
+                        : 'row invalid'
+                      : 'row in progress'}
+                  </span>
                 </div>
 
-                {displayedRawRows.map((row, rowIndex) => {
-                  const rowResult = rowResultMap.get(rowIndex);
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                  {csvColumns.map((column) => {
+                    const stepKey = `${focusedRowIndex}:${column}`;
+                    const completedStep = completedStepMap.get(stepKey);
+                    const isActive =
+                      currentStep?.rowIndex === focusedRowIndex &&
+                      currentStep.fieldName === column;
+                    const rawColumnValue = focusedRawRow[column] ?? null;
+                    const shouldSpanFullWidth =
+                      shouldRenderCurrentRowCardFullWidth(column, rawColumnValue);
 
-                  return (
-                    <div
-                      key={`row-${rowIndex}`}
-                      className="grid border-b border-white/6 last:border-b-0"
-                      style={{
-                        gridTemplateColumns: `72px repeat(${csvColumns.length}, minmax(180px, 1fr))`,
-                      }}
-                    >
-                      <div className="px-3 py-3 text-sm font-semibold text-slate-300">
-                        {rowIndex + 1}
-                      </div>
-                      {csvColumns.map((column) => {
-                        const stepKey = `${rowIndex}:${column}`;
-                        const completedStep = completedStepMap.get(stepKey);
-                        const isActive =
-                          currentStep?.rowIndex === rowIndex &&
-                          currentStep.fieldName === column;
-
-                        return (
-                          <div
-                            key={`${rowIndex}-${column}`}
-                            className={`min-w-0 truncate px-3 py-3 text-sm transition ${
-                              isActive
-                                ? 'bg-cyan-500/14 text-cyan-50'
-                                : completedStep
-                                  ? completedStep.passed
-                                    ? 'bg-emerald-500/8 text-emerald-100'
-                                    : 'bg-amber-500/10 text-amber-100'
-                                  : rowResult
-                                    ? rowResult.passed
-                                      ? 'text-slate-100'
-                                      : 'text-slate-200'
-                                    : 'text-slate-300'
-                            }`}
-                            title={String(row[column] ?? '')}
-                          >
-                            {String(row[column] ?? '')}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                    return (
+                      <article
+                        key={`${focusedRowIndex}-${column}`}
+                        className={`min-w-0 rounded-2xl border p-4 transition ${
+                          shouldSpanFullWidth ? 'sm:col-span-2 2xl:col-span-3 ' : ''
+                        }${
+                          isActive
+                            ? 'border-cyan-300/40 bg-cyan-500/12'
+                            : completedStep
+                              ? completedStep.passed
+                                ? 'border-emerald-400/25 bg-emerald-500/8'
+                                : 'border-amber-400/25 bg-amber-500/10'
+                              : 'border-white/10 bg-slate-950/75'
+                        }`}
+                      >
+                        <p
+                          className={
+                            shouldSpanFullWidth
+                              ? 'text-xs uppercase tracking-[0.2em] text-slate-400 break-all'
+                              : 'overflow-hidden text-ellipsis whitespace-nowrap text-xs uppercase tracking-[0.2em] text-slate-400'
+                          }
+                          title={column}
+                        >
+                          {column}
+                        </p>
+                        <p
+                          className={currentRowValueTextClassName}
+                          title={String(rawColumnValue ?? '')}
+                        >
+                          {formatCurrentRowValue(rawColumnValue)}
+                        </p>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-5 rounded-3xl border border-dashed border-white/10 bg-slate-950/45 p-5 text-sm leading-7 text-slate-400">
+                The active CSV row will appear here when the walkthrough starts.
+              </div>
+            )}
 
             {state.error ? (
               <div className="mt-5 rounded-3xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm leading-6 text-rose-100">
@@ -800,7 +1075,7 @@ export function ValidationVisualizerModal({
             rawRows: state.rawRows,
             rowResults: visibleRowResults,
             pendingRows,
-            visibleColumns: csvColumns,
+            visibleColumns: resultColumns,
             totalRows: state.rawRows.length,
             maxDisplayedRows: state.request.maxVisualizedRows,
             emptyMessage:
