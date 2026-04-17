@@ -58,6 +58,8 @@ export interface ExerciseVisualizationConfig {
   modelPlaceholderId: string;
   csvFileId?: string;
   fieldOrder?: string[];
+  visibleColumns?: string[];
+  maxVisualizedRows?: number;
 }
 
 export interface ExerciseExample {

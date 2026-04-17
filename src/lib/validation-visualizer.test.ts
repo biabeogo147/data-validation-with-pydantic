@@ -45,6 +45,8 @@ const exercise: ExerciseDefinition = {
     modelPlaceholderId: 'MODEL_A',
     csvFileId: 'people',
     fieldOrder: ['name', 'age'],
+    visibleColumns: ['name'],
+    maxVisualizedRows: 1,
   },
 };
 
@@ -79,6 +81,8 @@ describe('buildVisualizationRequest', () => {
     expect(request.modelClassName).toBe('A');
     expect(request.csvMountPath).toBe('/data/people.csv');
     expect(request.fieldSequence).toEqual(['name', 'age']);
+    expect(request.visibleColumns).toEqual(['name']);
+    expect(request.maxVisualizedRows).toBe(1);
     expect(request.highlights.age).toEqual({
       fieldName: 'age',
       startLine: 3,
@@ -87,6 +91,10 @@ describe('buildVisualizationRequest', () => {
     expect(request.pythonSource).toContain('csv.DictReader');
     expect(request.pythonSource).toContain('/data/people.csv');
     expect(request.pythonSource).toContain('"age"');
+    expect(request.pythonSource).toContain('__visualizer_max_visualized_rows = 1');
+    expect(request.pythonSource).toContain(
+      'if __visualizer_max_visualized_rows is None or __row_index < __visualizer_max_visualized_rows:',
+    );
   });
 
   it('fails when the requested model placeholder does not exist', () => {
@@ -250,5 +258,16 @@ describe('getVisibleRowResults', () => {
     expect(getVisibleRowResults(rowResults, steps, 0, 'complete')).toEqual(
       rowResults,
     );
+  });
+
+  it('keeps skipped rows hidden during playback when only the first rows are animated', () => {
+    const partiallyAnimatedSteps = steps.slice(0, 2);
+
+    expect(
+      getVisibleRowResults(rowResults, partiallyAnimatedSteps, 1, 'playing'),
+    ).toEqual([rowResults[0]]);
+    expect(
+      getVisibleRowResults(rowResults, partiallyAnimatedSteps, 1, 'complete'),
+    ).toEqual(rowResults);
   });
 });

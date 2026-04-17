@@ -154,13 +154,15 @@ export function useValidationVisualizer(options: {
     exercise: ExerciseDefinition,
     values: ExercisePlaceholderValues,
   ) {
+    let request: VisualizationRequest | null = null;
+
     setState({
       isOpen: true,
       status: 'loading',
       mode: 'direct',
       exerciseId: exercise.id,
       speed: null,
-      request: null,
+      request,
       rawRows: [],
       steps: [],
       rowResults: [],
@@ -171,11 +173,16 @@ export function useValidationVisualizer(options: {
     });
 
     try {
-      const request = exercise.visualizationConfig
+      request = exercise.visualizationConfig
         ? buildVisualizationRequest(exercise, values)
         : null;
 
       if (request) {
+        setState((currentState) => ({
+          ...currentState,
+          request,
+        }));
+
         const parsed = await executeVisualizationRequest(
           request,
           exercise,
@@ -188,6 +195,7 @@ export function useValidationVisualizer(options: {
         if (parsed && activeTokenRef.current === token) {
           setState((currentState) => ({
             ...currentState,
+            request,
             rawRows: parsed.rawRows,
             rowResults: parsed.rowResults,
             detail: 'Whole-file CSV results are ready. Running final exercise checks...',

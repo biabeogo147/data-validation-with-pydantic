@@ -92,7 +92,7 @@ export const baseModelExercise: ExerciseDefinition = {
       {
         id: 'products',
         fileCsvPath: 'fixtures/amazon.csv',
-        previewColumns: ['product_id', 'product_name', 'category', 'rating'],
+        previewColumns: ['product_id', 'product_name', 'rating'],
       },
     ],
   },
@@ -155,5 +155,7 @@ export const baseModelExercise: ExerciseDefinition = {
     modelPlaceholderId: 'MODEL_SCHEMA',
     csvFileId: 'products',
     fieldOrder: ['product_id', 'product_name', 'rating'],
+    visibleColumns: ['product_id', 'product_name', 'rating'],
+    maxVisualizedRows: 4,
   },
 };

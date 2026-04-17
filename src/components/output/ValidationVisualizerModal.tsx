@@ -15,15 +15,80 @@ interface ValidationVisualizerModalProps {
 }
 
 function formatValue(value: unknown) {
+  const clippedValue = clipValue(value);
+
   if (typeof value === 'string') {
-    return JSON.stringify(value);
+    return JSON.stringify(clippedValue);
   }
 
-  return JSON.stringify(value, null, 2) ?? 'null';
+  return JSON.stringify(clippedValue, null, 2) ?? 'null';
 }
 
 const valuePreClassName =
-  'mt-2 overflow-x-auto whitespace-pre-wrap break-words text-sm leading-6 text-slate-100';
+  'mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-slate-100';
+
+const MAX_PREVIEW_STRING_LENGTH = 120;
+
+function clipValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.length > MAX_PREVIEW_STRING_LENGTH
+      ? `${value.slice(0, MAX_PREVIEW_STRING_LENGTH - 3)}...`
+      : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => clipValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        clipValue(item),
+      ]),
+    );
+  }
+
+  return value;
+}
+
+function filterRecordColumns(
+  record: Record<string, unknown> | null | undefined,
+  visibleColumns: string[],
+) {
+  if (!record) {
+    return null;
+  }
+
+  if (visibleColumns.length === 0) {
+    return record;
+  }
+
+  return Object.fromEntries(
+    visibleColumns
+      .filter((column) => column in record)
+      .map((column) => [column, record[column]]),
+  );
+}
+
+function getDisplayColumns(
+  rawRows: Record<string, string>[],
+  request: ValidationVisualizerState['request'],
+) {
+  const availableColumns = rawRows[0]
+    ? Object.keys(rawRows[0])
+    : request?.fieldSequence ?? [];
+  const configuredColumns =
+    request?.visibleColumns && request.visibleColumns.length > 0
+      ? request.visibleColumns
+      : availableColumns;
+  const visibleColumns = Array.from(new Set(configuredColumns.filter(Boolean)));
+
+  return {
+    visibleColumns: visibleColumns.length > 0 ? visibleColumns : availableColumns,
+    totalColumns: availableColumns.length > 0 ? availableColumns.length : visibleColumns.length,
+  };
+}
 
 function getRunStatusBadgeClasses(status: 'running' | ExerciseRunResult['status']) {
   switch (status) {
@@ -121,20 +186,33 @@ function renderWholeFileResultSection({
   rawRows,
   rowResults,
   pendingRows,
+  visibleColumns,
+  totalRows,
+  maxDisplayedRows,
   emptyMessage,
 }: {
   rawRows: Record<string, string>[];
   rowResults: {
     rowIndex: number;
     passed: boolean;
-    validatedRow: Record<string, unknown> | null;
-    errors: string[];
+      validatedRow: Record<string, unknown> | null;
+      errors: string[];
   }[];
   pendingRows: number;
+  visibleColumns: string[];
+  totalRows: number;
+  maxDisplayedRows: number | null;
   emptyMessage: string;
 }) {
+  const displayedRowResults =
+    maxDisplayedRows === null ? rowResults : rowResults.slice(0, maxDisplayedRows);
   const passedRows = rowResults.filter((rowResult) => rowResult.passed).length;
   const failedRows = rowResults.filter((rowResult) => !rowResult.passed).length;
+  const hiddenPreviewCount =
+    maxDisplayedRows !== null && totalRows > maxDisplayedRows
+      ? totalRows - maxDisplayedRows
+      : 0;
+  const hiddenPreviewLabel = hiddenPreviewCount === 1 ? 'row' : 'rows';
 
   return (
     <section className="mt-8 rounded-[28px] border border-white/10 bg-white/5 p-6">
@@ -156,15 +234,23 @@ function renderWholeFileResultSection({
             Failed rows: {failedRows}
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+            Showing {displayedRowResults.length} / {totalRows} rows
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
             Pending rows: {pendingRows}
           </span>
         </div>
       </div>
 
-      {rowResults.length > 0 ? (
+      {displayedRowResults.length > 0 ? (
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {rowResults.map((rowResult) => {
+          {displayedRowResults.map((rowResult) => {
             const rawRow = rawRows[rowResult.rowIndex];
+            const filteredRawRow = filterRecordColumns(rawRow, visibleColumns);
+            const filteredValidatedRow = filterRecordColumns(
+              rowResult.validatedRow,
+              visibleColumns,
+            );
 
             return (
               <article
@@ -196,7 +282,7 @@ function renderWholeFileResultSection({
                       Raw CSV row
                     </p>
                     <pre className={valuePreClassName}>
-                      {formatValue(rawRow ?? null)}
+                      {formatValue(filteredRawRow)}
                     </pre>
                   </div>
 
@@ -206,7 +292,7 @@ function renderWholeFileResultSection({
                     </p>
                     <pre className={valuePreClassName}>
                       {rowResult.passed
-                        ? formatValue(rowResult.validatedRow)
+                        ? formatValue(filteredValidatedRow)
                         : formatValue(rowResult.errors)}
                     </pre>
                   </div>
@@ -214,6 +300,19 @@ function renderWholeFileResultSection({
               </article>
             );
           })}
+
+          {hiddenPreviewCount > 0 ? (
+            <article className="rounded-3xl border border-dashed border-white/15 bg-slate-950/45 p-5">
+              <p className="text-4xl font-semibold tracking-[0.2em] text-slate-300">
+                ...
+              </p>
+              <p className="mt-4 text-sm leading-7 text-slate-300">
+                ... {hiddenPreviewCount} more {hiddenPreviewLabel} are hidden from
+                this preview. The walkthrough shows only the first{' '}
+                {maxDisplayedRows} rows here.
+              </p>
+            </article>
+          ) : null}
         </div>
       ) : (
         <div className="mt-6 rounded-3xl border border-dashed border-white/10 bg-slate-950/45 p-5 text-sm leading-7 text-slate-400">
@@ -319,7 +418,9 @@ export function ValidationVisualizerModal({
   }
 
   if (state.mode === 'direct') {
+    const { visibleColumns } = getDisplayColumns(state.rawRows, state.request);
     const pendingRows = Math.max(state.rawRows.length - state.rowResults.length, 0);
+    const maxDisplayedRows = state.request?.maxVisualizedRows ?? null;
 
     return (
       <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 px-4 py-6 backdrop-blur-md">
@@ -350,6 +451,9 @@ export function ValidationVisualizerModal({
             rawRows: state.rawRows,
             rowResults: state.rowResults,
             pendingRows,
+            visibleColumns,
+            totalRows: state.rawRows.length,
+            maxDisplayedRows,
             emptyMessage:
               'The row-level results will appear here as soon as the direct validation finishes.',
           })}
@@ -399,10 +503,10 @@ export function ValidationVisualizerModal({
     ? state.request.highlights[currentStep.fieldName]
     : null;
   const codeLines = state.request.modelCode.split('\n');
-  const csvColumns =
-    state.rawRows.length > 0
-      ? Object.keys(state.rawRows[0])
-      : state.request.fieldSequence;
+  const { visibleColumns: csvColumns, totalColumns } = getDisplayColumns(
+    state.rawRows,
+    state.request,
+  );
   const visibleRowResults = getVisibleRowResults(
     state.rowResults,
     state.steps,
@@ -413,6 +517,14 @@ export function ValidationVisualizerModal({
     visibleRowResults.map((rowResult) => [rowResult.rowIndex, rowResult]),
   );
   const pendingRows = Math.max(state.rawRows.length - visibleRowResults.length, 0);
+  const animatedRowCount =
+    state.request.maxVisualizedRows === null
+      ? state.rawRows.length
+      : Math.min(state.request.maxVisualizedRows, state.rawRows.length);
+  const displayedRawRows =
+    state.request.maxVisualizedRows === null
+      ? state.rawRows
+      : state.rawRows.slice(0, state.request.maxVisualizedRows);
   const shouldShowExerciseResult =
     Boolean(state.runResult) ||
     (state.mode === 'walkthrough' &&
@@ -421,7 +533,7 @@ export function ValidationVisualizerModal({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 px-4 py-6 backdrop-blur-md">
-      <div className="mx-auto max-w-7xl rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/60">
+      <div className="mx-auto w-full max-w-[1800px] rounded-[32px] border border-white/10 bg-slate-950/95 p-6 shadow-2xl shadow-slate-950/60">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
@@ -434,6 +546,12 @@ export function ValidationVisualizerModal({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            {state.request.maxVisualizedRows !== null &&
+            state.rawRows.length > state.request.maxVisualizedRows ? (
+              <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+                Animating {animatedRowCount} / {state.rawRows.length} rows
+              </span>
+            ) : null}
             {state.speed ? (
               <span className="rounded-full border border-cyan-400/30 bg-cyan-500/12 px-4 py-2 text-sm font-semibold text-cyan-100">
                 {state.speed}
@@ -475,7 +593,7 @@ export function ValidationVisualizerModal({
           })}
         </div>
 
-        <div className="mt-8 grid gap-6 xl:grid-cols-[1fr_1.1fr_1fr]">
+        <div className="mt-8 grid gap-6 xl:grid-cols-[1.15fr_1.35fr_0.9fr]">
           <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
               Validated Output
@@ -576,78 +694,94 @@ export function ValidationVisualizerModal({
           </section>
 
           <section className="rounded-[28px] border border-white/10 bg-white/5 p-5">
-            <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
-              Raw Input
-            </p>
-            <h3 className="mt-3 text-xl font-semibold text-white">
-              Full CSV input
-            </h3>
-
-            <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/85">
-              <div
-                className="grid border-b border-white/10 bg-slate-900/80"
-                style={{
-                  gridTemplateColumns: `72px repeat(${csvColumns.length}, minmax(0, 1fr))`,
-                }}
-              >
-                <div className="px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Row
-                </div>
-                {csvColumns.map((column) => (
-                  <div
-                    key={column}
-                    className="px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-400"
-                  >
-                    {column}
-                  </div>
-                ))}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
+                  Raw Input
+                </p>
+                <h3 className="mt-3 text-xl font-semibold text-white">
+                  Full CSV input
+                </h3>
               </div>
+              <div className="flex flex-wrap gap-3">
+                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+                  Showing {displayedRawRows.length} / {state.rawRows.length} rows
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+                  Showing {csvColumns.length} / {totalColumns} columns
+                </span>
+              </div>
+            </div>
 
-              {state.rawRows.map((row, rowIndex) => {
-                const rowResult = rowResultMap.get(rowIndex);
-
-                return (
-                  <div
-                    key={`row-${rowIndex}`}
-                    className="grid border-b border-white/6 last:border-b-0"
-                    style={{
-                      gridTemplateColumns: `72px repeat(${csvColumns.length}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    <div className="px-3 py-3 text-sm font-semibold text-slate-300">
-                      {rowIndex + 1}
-                    </div>
-                    {csvColumns.map((column) => {
-                      const stepKey = `${rowIndex}:${column}`;
-                      const completedStep = completedStepMap.get(stepKey);
-                      const isActive =
-                        currentStep?.rowIndex === rowIndex &&
-                        currentStep.fieldName === column;
-
-                      return (
-                        <div
-                          key={`${rowIndex}-${column}`}
-                          className={`px-3 py-3 text-sm transition ${
-                            isActive
-                              ? 'bg-cyan-500/14 text-cyan-50'
-                              : completedStep
-                                ? completedStep.passed
-                                  ? 'bg-emerald-500/8 text-emerald-100'
-                                  : 'bg-amber-500/10 text-amber-100'
-                                : rowResult
-                                  ? rowResult.passed
-                                    ? 'text-slate-100'
-                                    : 'text-slate-200'
-                                  : 'text-slate-300'
-                          }`}
-                        >
-                          {String(row[column] ?? '')}
-                        </div>
-                      );
-                    })}
+            <div className="mt-5 overflow-x-auto">
+              <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/85">
+                <div
+                  className="grid border-b border-white/10 bg-slate-900/80"
+                  style={{
+                    gridTemplateColumns: `72px repeat(${csvColumns.length}, minmax(180px, 1fr))`,
+                  }}
+                >
+                  <div className="px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+                    Row
                   </div>
-                );
-              })}
+                  {csvColumns.map((column) => (
+                    <div
+                      key={column}
+                      className="min-w-0 truncate px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-400"
+                      title={column}
+                    >
+                      {column}
+                    </div>
+                  ))}
+                </div>
+
+                {displayedRawRows.map((row, rowIndex) => {
+                  const rowResult = rowResultMap.get(rowIndex);
+
+                  return (
+                    <div
+                      key={`row-${rowIndex}`}
+                      className="grid border-b border-white/6 last:border-b-0"
+                      style={{
+                        gridTemplateColumns: `72px repeat(${csvColumns.length}, minmax(180px, 1fr))`,
+                      }}
+                    >
+                      <div className="px-3 py-3 text-sm font-semibold text-slate-300">
+                        {rowIndex + 1}
+                      </div>
+                      {csvColumns.map((column) => {
+                        const stepKey = `${rowIndex}:${column}`;
+                        const completedStep = completedStepMap.get(stepKey);
+                        const isActive =
+                          currentStep?.rowIndex === rowIndex &&
+                          currentStep.fieldName === column;
+
+                        return (
+                          <div
+                            key={`${rowIndex}-${column}`}
+                            className={`min-w-0 truncate px-3 py-3 text-sm transition ${
+                              isActive
+                                ? 'bg-cyan-500/14 text-cyan-50'
+                                : completedStep
+                                  ? completedStep.passed
+                                    ? 'bg-emerald-500/8 text-emerald-100'
+                                    : 'bg-amber-500/10 text-amber-100'
+                                  : rowResult
+                                    ? rowResult.passed
+                                      ? 'text-slate-100'
+                                      : 'text-slate-200'
+                                    : 'text-slate-300'
+                            }`}
+                            title={String(row[column] ?? '')}
+                          >
+                            {String(row[column] ?? '')}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {state.error ? (
@@ -666,6 +800,9 @@ export function ValidationVisualizerModal({
             rawRows: state.rawRows,
             rowResults: visibleRowResults,
             pendingRows,
+            visibleColumns: csvColumns,
+            totalRows: state.rawRows.length,
+            maxDisplayedRows: state.request.maxVisualizedRows,
             emptyMessage:
               'The row-level results will append here as soon as each CSV row finishes validation.',
           })}

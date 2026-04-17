@@ -13,6 +13,12 @@ Add a centered teaching modal that visually demonstrates how a Pydantic class va
   - right panel: raw CSV table with active row and field highlighted
   - center panel: Pydantic class code
   - left panel: validated field output
+- The visualizer can limit the walkthrough to a subset of rows while still validating the full CSV:
+  - `maxVisualizedRows` controls how many rows get field-by-field playback
+  - remaining rows still run validation, but they skip the 1x/2x/4x field animation
+- The modal can also limit which CSV columns are shown during the walkthrough:
+  - `visibleColumns` controls the raw-input table and whole-file result cards
+  - long values remain inside scrollable boxes so the popup stays inside the viewport
 - After playback completes, the modal shows:
   - raw input for the whole CSV file
   - validation results for every row in the file
@@ -29,6 +35,7 @@ Add a centered teaching modal that visually demonstrates how a Pydantic class va
    - displays the three-column teaching layout
    - animates the active row/field at the selected speed
    - supports `Skip`, `Replay`, and close
+   - keeps wide CSV data constrained with config-driven visible columns and scrollable result blocks
 5. After animation completes, run the existing exercise execution and refresh the normal result panel while also keeping the modal open on a whole-file summary state.
 
 ## Implementation Notes
@@ -37,3 +44,6 @@ Add a centered teaching modal that visually demonstrates how a Pydantic class va
 - Start with field-level highlighting only; validator-function tracing is out of scope for this MVP.
 - Every exercise should use a CSV file as its primary input source.
 - Preserve the current reset behavior when switching exercises: the modal must close and output must reset.
+- Prefer defaults that are safe for large CSVs:
+  - if `visibleColumns` is omitted, fall back to the field order or inferred model fields
+  - if `maxVisualizedRows` is omitted, animate all rows

@@ -15,6 +15,8 @@ export interface VisualizationRequest {
   modelCode: string;
   csvMountPath: string;
   fieldSequence: string[];
+  visibleColumns: string[];
+  maxVisualizedRows: number | null;
   highlights: Record<string, ModelFieldHighlight>;
   pythonSource: string;
 }
@@ -145,13 +147,35 @@ function inferFieldSequenceFromModelCode(modelCode: string): string[] {
     .filter((fieldName): fieldName is string => Boolean(fieldName));
 }
 
+function sanitizeVisibleColumns(
+  configuredVisibleColumns: string[] | undefined,
+  fallbackColumns: string[],
+): string[] {
+  const columns = configuredVisibleColumns?.length
+    ? configuredVisibleColumns
+    : fallbackColumns;
+
+  return Array.from(new Set(columns.filter(Boolean)));
+}
+
+function sanitizeMaxVisualizedRows(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+}
+
 function buildVisualizationPythonSource(
   prelude: string,
   modelCode: string,
   modelClassName: string,
   csvMountPath: string,
   fieldSequence: string[],
+  maxVisualizedRows: number | null,
 ): string {
+  const maxVisualizedRowsLiteral =
+    maxVisualizedRows === null ? 'None' : String(maxVisualizedRows);
   const generatedScript = [
     'import json as __visualizer_json',
     'import csv',
@@ -160,6 +184,7 @@ function buildVisualizationPythonSource(
     '',
     `__visualizer_csv_path = Path(${JSON.stringify(csvMountPath)})`,
     `__visualizer_fields = ${JSON.stringify(fieldSequence)}`,
+    `__visualizer_max_visualized_rows = ${maxVisualizedRowsLiteral}`,
     `__visualizer_model = ${modelClassName}`,
     '',
     'with __visualizer_csv_path.open("r", encoding="utf-8") as __visualizer_handle:',
@@ -167,42 +192,43 @@ function buildVisualizationPythonSource(
     `print(${JSON.stringify(VISUALIZER_ROWS_MARKER)} + __visualizer_json.dumps(__visualizer_rows))`,
     '',
     'for __row_index, __visualizer_row in enumerate(__visualizer_rows):',
-    '    for __field in __visualizer_fields:',
-    '        __field_info = __visualizer_model.model_fields[__field]',
-    '        __field_model = create_model(',
-    '            f"__Visualizer_{__field}",',
-    '            **{',
-    '                __field: (',
-    '                    __field_info.annotation,',
-    '                    ...,',
-    '                )',
-    '            },',
-    '        )',
-    '        __payload = {__field: __visualizer_row[__field]} if __field in __visualizer_row else {}',
-    '        __raw_value = __visualizer_row.get(__field)',
+    '    if __visualizer_max_visualized_rows is None or __row_index < __visualizer_max_visualized_rows:',
+    '        for __field in __visualizer_fields:',
+    '            __field_info = __visualizer_model.model_fields[__field]',
+    '            __field_model = create_model(',
+    '                f"__Visualizer_{__field}",',
+    '                **{',
+    '                    __field: (',
+    '                        __field_info.annotation,',
+    '                        ...,',
+    '                    )',
+    '                },',
+    '            )',
+    '            __payload = {__field: __visualizer_row[__field]} if __field in __visualizer_row else {}',
+    '            __raw_value = __visualizer_row.get(__field)',
     '',
-    '        try:',
-    '            __validated = __field_model.model_validate(__payload)',
-    '            __validated_value = getattr(__validated, __field)',
-    `            print(${JSON.stringify(VISUALIZER_MARKER)} + __visualizer_json.dumps({`,
-    '                "rowIndex": __row_index,',
-    '                "fieldName": __field,',
-    '                "passed": True,',
-    '                "rawValue": __raw_value,',
-    '                "validatedValue": __validated_value,',
-    '                "message": f"Accepted as {type(__validated_value).__name__}",',
-    '            }))',
-    '        except ValidationError as __field_error:',
-    '            __errors = __field_error.errors()',
-    '            __first_error = __errors[0] if __errors else {}',
-    `            print(${JSON.stringify(VISUALIZER_MARKER)} + __visualizer_json.dumps({`,
-    '                "rowIndex": __row_index,',
-    '                "fieldName": __field,',
-    '                "passed": False,',
-    '                "rawValue": __raw_value,',
-    '                "validatedValue": None,',
-    '                "message": __first_error.get("msg", str(__field_error)),',
-    '            }))',
+    '            try:',
+    '                __validated = __field_model.model_validate(__payload)',
+    '                __validated_value = getattr(__validated, __field)',
+    `                print(${JSON.stringify(VISUALIZER_MARKER)} + __visualizer_json.dumps({`,
+    '                    "rowIndex": __row_index,',
+    '                    "fieldName": __field,',
+    '                    "passed": True,',
+    '                    "rawValue": __raw_value,',
+    '                    "validatedValue": __validated_value,',
+    '                    "message": f"Accepted as {type(__validated_value).__name__}",',
+    '                }))',
+    '            except ValidationError as __field_error:',
+    '                __errors = __field_error.errors()',
+    '                __first_error = __errors[0] if __errors else {}',
+    `                print(${JSON.stringify(VISUALIZER_MARKER)} + __visualizer_json.dumps({`,
+    '                    "rowIndex": __row_index,',
+    '                    "fieldName": __field,',
+    '                    "passed": False,',
+    '                    "rawValue": __raw_value,',
+    '                    "validatedValue": None,',
+    '                    "message": __first_error.get("msg", str(__field_error)),',
+    '                }))',
     '',
     '    try:',
     '        __validated_row = __visualizer_model.model_validate(__visualizer_row)',
@@ -239,6 +265,13 @@ export function buildVisualizationRequest(
   const fieldSequence =
     visualizationConfig.fieldOrder ??
     inferFieldSequenceFromModelCode(modelCode);
+  const visibleColumns = sanitizeVisibleColumns(
+    visualizationConfig.visibleColumns,
+    fieldSequence,
+  );
+  const maxVisualizedRows = sanitizeMaxVisualizedRows(
+    visualizationConfig.maxVisualizedRows,
+  );
   const csvMountPath = getVisualizationCsvMountPath(
     exercise,
     visualizationConfig,
@@ -254,6 +287,8 @@ export function buildVisualizationRequest(
     modelCode,
     csvMountPath,
     fieldSequence,
+    visibleColumns,
+    maxVisualizedRows,
     highlights,
     pythonSource: buildVisualizationPythonSource(
       prelude,
@@ -261,6 +296,7 @@ export function buildVisualizationRequest(
       visualizationConfig.modelClassName,
       csvMountPath,
       fieldSequence,
+      maxVisualizedRows,
     ),
   };
 }

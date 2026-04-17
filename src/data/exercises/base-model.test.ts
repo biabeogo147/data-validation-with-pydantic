@@ -8,7 +8,7 @@ describe('baseModelExercise', () => {
       {
         id: 'products',
         fileCsvPath: 'fixtures/amazon.csv',
-        previewColumns: ['product_id', 'product_name', 'category', 'rating'],
+        previewColumns: ['product_id', 'product_name', 'rating'],
       },
     ]);
     expect(baseModelExercise.templateCode).toContain('/data/amazon.csv');
@@ -39,8 +39,16 @@ describe('baseModelExercise', () => {
     expect(baseModelExercise.fileCsvConfig.files[0]?.previewColumns).toEqual([
       'product_id',
       'product_name',
-      'category',
       'rating',
     ]);
+  });
+
+  it('limits the walkthrough to a curated set of columns and rows', () => {
+    expect(baseModelExercise.visualizationConfig?.visibleColumns).toEqual([
+      'product_id',
+      'product_name',
+      'rating',
+    ]);
+    expect(baseModelExercise.visualizationConfig?.maxVisualizedRows).toBe(3);
   });
 });
