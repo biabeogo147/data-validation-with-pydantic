@@ -5,7 +5,7 @@ export const fieldValidatorExercise: ExerciseDefinition = {
   title: 'Normalize Amazon category and pricing strings with @field_validator',
   shortTitle: '@field_validator',
   description:
-    'Move beyond raw strings. Parse category paths, rupee prices, discount percentages, and rating counts into cleaner Python types before validation.',
+    'Parse các category path, giá rupee, phần trăm giảm giá và số lượt đánh giá thành các Python type gọn gàng hơn trước khi validate.',
   editorImports: ['from pydantic import BaseModel, field_validator'],
   difficulty: 'intermediate',
   tags: ['Pydantic', 'field_validator', 'CSV', 'normalization'],
@@ -58,7 +58,7 @@ export const fieldValidatorExercise: ExerciseDefinition = {
   placeholders: [
     {
       id: 'MODEL_SCHEMA',
-      label: 'Define AmazonPricingRecord',
+      label: 'Định nghĩa AmazonPricingRecord',
       defaultCode: ['class AmazonPricingRecord(BaseModel):', '    pass'].join(
         '\n',
       ),
@@ -68,35 +68,35 @@ export const fieldValidatorExercise: ExerciseDefinition = {
     {
       id: 'field-validator-counts',
       kind: 'python_assert',
-      label: 'validates every row because this schema ignores the noisy rating column',
+      label: 'validate mọi dòng vì schema này bỏ qua cột rating dễ bị lỗi',
       code: [
         'assert valid_count == 1465',
         'assert invalid_count == 0',
         'assert invalid_product_ids == []',
       ].join('\n'),
-      successMessage: 'This schema proves you only validate the columns you choose to model.',
-      failureMessage: 'This normalization exercise should validate all rows because it does not model `rating` yet.',
+      successMessage: 'Chính xác! Vì bạn không khai báo cột `rating` trong schema, Pydantic đã lờ đi dòng có rating bị lỗi. Toàn bộ 1465 dòng đều pass.',
+      failureMessage: 'Ở bài này, mọi sample đều phải pass.',
     },
     {
       id: 'field-validator-types',
       kind: 'python_assert',
-      label: 'parses raw numeric strings into real numeric Python types',
+      label: 'parse các chuỗi số thô thành các kiểu numeric trong Python',
       code: [
         'assert all(isinstance(row["discounted_price"], float) for row in sample_valid_rows)',
         'assert all(isinstance(row["actual_price"], float) for row in sample_valid_rows)',
         'assert all(isinstance(row["discount_percentage"], int) for row in sample_valid_rows)',
         'assert all(isinstance(row["rating_count"], int) for row in sample_valid_rows)',
       ].join('\n'),
-      successMessage: 'Your field validators now produce numeric values that are ready for analysis.',
-      failureMessage: 'Prices, discounts, and rating counts should be normalized into numeric Python types.',
+      successMessage: 'Các field validator giờ đã tạo ra các giá trị số sẵn sàng cho việc phân tích.',
+      failureMessage: 'Các cột giá tiền, phần trăm giảm giá và lượt đánh giá cần được chuyển sang kiểu số (int hoặc float) thay vì để ở dạng chuỗi (string).',
     },
     {
       id: 'field-validator-hierarchy',
       kind: 'python_assert',
-      label: 'turns category paths into structured lists',
+      label: 'chuyển category path thành các list có cấu trúc',
       code: 'assert all(row["category_depth"] >= 2 for row in sample_valid_rows)',
-      successMessage: 'Your category field is now a real hierarchy instead of one long string.',
-      failureMessage: 'The category path should become a list with at least two levels.',
+      successMessage: 'Trường category giờ là một hệ thống phân cấp thực sự thay vì một chuỗi dài.',
+      failureMessage: 'Bạn cần viết validator để tách (split) chuỗi `category` thành một list chứa các cấp bậc danh mục.',
     },
   ],
   fileCsvConfig: {
@@ -116,10 +116,10 @@ export const fieldValidatorExercise: ExerciseDefinition = {
     ],
   },
   hints: [
-    'Use `mode="before"` so you can clean raw CSV strings before Pydantic parses them.',
-    'For prices, keep only digits and `.` before casting to `float`.',
-    'For `category`, split on `|` and strip each segment.',
-    'For `rating_count`, remember that an empty CSV cell can be normalized into `0` after you strip commas.',
+    'Sử dụng `mode="before"` để bạn có thể clean các chuỗi CSV thô trước khi Pydantic parse chúng.',
+    'Đối với giá tiền, chỉ giữ lại các chữ số và dấu `.` trước khi ép kiểu sang `float`.',
+    'Đối với `category`, split bằng dấu `|` và strip từng phần tử.',
+    'Đối với `rating_count`, hãy nhớ rằng một ô CSV trống có thể được chuẩn hóa thành `0` sau khi bạn loại bỏ các dấu phẩy.',
   ],
   example: {
     title: 'Example output',
@@ -181,9 +181,9 @@ export const fieldValidatorExercise: ExerciseDefinition = {
   learningConfig: {
     estimatedMinutes: 12,
     objectives: [
-      'Use field validators to normalize raw CSV strings before validation.',
-      'Turn hierarchy and pricing columns into richer Python data types.',
-      'See that a schema validates only the columns it explicitly models.',
+      'Sử dụng field validator để chuẩn hóa các chuỗi CSV gốc trước khi validate.',
+      'Chuyển các cột phân cấp (hierarchy) và giá cả thành các Python data type chi tiết hơn.',
+      'Hiểu được rằng một schema sẽ chỉ validate các cột mà nó khai báo rõ ràng.',
     ],
   },
   visualizationConfig: {

@@ -5,7 +5,9 @@ export const modelValidatorExercise: ExerciseDefinition = {
   title: 'Enforce Amazon pricing and review business rules with @model_validator',
   shortTitle: '@model_validator',
   description:
-    'Add cross-field rules that a single column cannot enforce by itself. This exercise checks price relationships, discount consistency, and whether rated products actually have ratings counted.',
+    'Thêm các quy tắc kiểm tra chéo giữa các field (cross-field rules) mà một cột đơn lẻ không thể tự quyết định được. ' +
+    'Bài tập này sẽ kiểm tra tính hợp lý của giá tiền, mức độ nhất quán của phần trăm giảm giá, và xem các sản phẩm có ' +
+    'điểm rating thì có thực sự có lượt đánh giá nào được tính hay không.',
   editorImports: [
     'from pydantic import BaseModel, field_validator, model_validator',
   ],
@@ -64,7 +66,7 @@ export const modelValidatorExercise: ExerciseDefinition = {
   placeholders: [
     {
       id: 'MODEL_SCHEMA',
-      label: 'Define AmazonPricingRules',
+      label: 'Định nghĩa AmazonPricingRules',
       defaultCode: ['class AmazonPricingRules(BaseModel):', '    pass'].join(
         '\n',
       ),
@@ -74,33 +76,33 @@ export const modelValidatorExercise: ExerciseDefinition = {
     {
       id: 'model-validator-counts',
       kind: 'python_assert',
-      label: 'surfaces the real business-rule failures in the Amazon dataset',
+      label: 'phát hiện chính xác các dòng vi phạm business rule trong dataset của Amazon',
       code: [
         'assert valid_count == 1462',
         'assert invalid_count == 3',
         'assert invalid_product_ids == ["B08L12N5H1", "B0B94JPY2N", "B0BQRJ3C47"]',
       ].join('\n'),
-      successMessage: 'Your model validator is now catching both malformed data and semantic business-rule issues.',
-      failureMessage: 'This exercise should reject the malformed rating row plus the two rows with impossible review counts.',
+      successMessage: 'Rất tốt! Model validator giờ đây không chỉ bắt được dữ liệu sai định dạng mà còn tóm gọn được cả những lỗi sai về mặt logic nghiệp vụ (business rule).',
+      failureMessage: 'Bạn cần reject dòng có rating bị lỗi định dạng ban đầu, CỘNG THÊM 2 dòng có số lượt đánh giá vô lý (sản phẩm có điểm rating nhưng lượt đánh giá lại <= 0).',
     },
     {
       id: 'model-validator-pricing',
       kind: 'python_assert',
-      label: 'enforces consistent pricing relationships',
+      label: 'đảm bảo tính nhất quán giữa giá bán và giá gốc',
       code: [
         'assert all(row["savings"] >= 0 for row in sample_valid_rows)',
         'assert all(row["discount_matches_price"] for row in sample_valid_rows)',
       ].join('\n'),
-      successMessage: 'Your cross-field pricing rules are working.',
-      failureMessage: 'Validated rows should keep sane price relationships and matching discount percentages.',
+      successMessage: 'Chính xác! Các quy tắc kiểm tra chéo giá tiền đang hoạt động cực kỳ hoàn hảo.',
+      failureMessage: 'Các dòng pass qua validator phải đảm bảo logic: giá bán <= giá gốc, đồng thời phần trăm giảm giá tính toán ra phải khớp với cột discount_percentage.',
     },
     {
       id: 'model-validator-reviews',
       kind: 'python_assert',
-      label: 'enforces a valid review-count relationship',
+      label: 'đảm bảo tính hợp lý của số lượt đánh giá',
       code: 'assert all(row["review_count_ok"] for row in sample_valid_rows)',
-      successMessage: 'Your model validator also enforces the review-count rule.',
-      failureMessage: 'Rated products should keep a positive `rating_count`.',
+      successMessage: 'Tuyệt vời! Bạn đã áp dụng thành công rule kiểm tra số lượt đánh giá.',
+      failureMessage: 'Lỗi logic: Những sản phẩm đã có điểm rating (> 0) thì bắt buộc rating_count cũng phải lớn hơn 0 nhé.',
     },
   ],
   fileCsvConfig: {
@@ -120,9 +122,9 @@ export const modelValidatorExercise: ExerciseDefinition = {
     ],
   },
   hints: [
-    'Reuse the numeric parsing logic from the field-validator exercise.',
-    'Use `@model_validator(mode="after")` for checks that depend on multiple fields at once.',
-    'Compare the stored `discount_percentage` with the percentage implied by the two price fields.',
+    'Tái sử dụng lại logic parse số liệu (giá tiền, discount...) từ bài tập field-validator trước.',
+    'Sử dụng `@model_validator(mode="after")` cho các quy tắc cần đối chiếu nhiều field cùng một lúc.',
+    'So sánh `discount_percentage` có sẵn trong dữ liệu với phần trăm giảm giá thực tế mà bạn tự tính toán được từ 2 field giá (actual_price và discounted_price).',
   ],
   example: {
     title: 'Example output',
@@ -197,8 +199,8 @@ export const modelValidatorExercise: ExerciseDefinition = {
   learningConfig: {
     estimatedMinutes: 10,
     objectives: [
-      'Write cross-field business rules with model_validator.',
-      'See the difference between format errors and semantic data-quality failures.',
+      'Viết các business rule kiểm tra chéo nhiều field (cross-field) bằng model_validator.',
+      'Phân biệt được sự khác nhau giữa lỗi sai định dạng (format errors) và lỗi sai về logic/chất lượng dữ liệu (semantic data-quality failures).',
     ],
   },
   visualizationConfig: {

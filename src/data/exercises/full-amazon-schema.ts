@@ -5,7 +5,8 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
   title: 'Build the silver-ready Pydantic schema for the full Amazon row',
   shortTitle: 'Full schema',
   description:
-    'Finish the journey by validating all Amazon columns together. Combine BaseModel, Field(...), field validators, and model validators into one full-row schema that is ready for a silver layer.',
+    'Hoàn thành validate tất cả các cột của Amazon Dataset cùng lúc. Kết hợp BaseModel, Field(...), field ' +
+    'validator và model validator thành một schema hoàn chỉnh cho cả dòng, sẵn sàng đưa vào silver layer.',
   editorImports: [
     'from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator',
   ],
@@ -66,7 +67,7 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
   placeholders: [
     {
       id: 'MODEL_SCHEMA',
-      label: 'Define AmazonProductRow',
+      label: 'Định nghĩa AmazonProductRow',
       defaultCode: ['class AmazonProductRow(BaseModel):', '    pass'].join('\n'),
     },
   ],
@@ -74,32 +75,32 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
     {
       id: 'full-schema-counts',
       kind: 'python_assert',
-      label: 'validates the full row while surfacing the real bad records',
+      label: 'validate toàn bộ dòng và phát hiện chính xác các bản ghi bị lỗi thực sự',
       code: [
         'assert valid_count == 1462',
         'assert invalid_count == 3',
         'assert invalid_product_ids == ["B08L12N5H1", "B0B94JPY2N", "B0BQRJ3C47"]',
       ].join('\n'),
-      successMessage: 'Your final schema validates the full dataset and surfaces the true problem rows.',
-      failureMessage: 'The final schema should validate the clean rows and keep the three known problem rows out.',
+      successMessage: 'Tuyệt vời! Schema đã validate thành công toàn bộ dataset và "tóm gọn" đúng những dòng có vấn đề.',
+      failureMessage: 'Schema cần validate thành công các dữ liệu sạch (clean rows) và loại bỏ chính xác 3 dòng lỗi mà chúng ta đã biết.',
     },
     {
       id: 'full-schema-structured-output',
       kind: 'python_assert',
-      label: 'produces structured list fields and consistent review bundles',
+      label: 'tạo ra các field dạng list có cấu trúc và nhóm dữ liệu review nhất quán',
       code: [
         'assert all(row["category_depth"] >= 2 for row in sample_valid_rows)',
         'assert all(row["about_bullet_count"] >= 1 for row in sample_valid_rows)',
         'assert all(row["reviewer_count"] >= 1 for row in sample_valid_rows)',
         'assert all(row["user_review_bundle_ok"] for row in sample_valid_rows)',
       ].join('\n'),
-      successMessage: 'Your final schema now shapes the nested list-like columns into usable structures.',
-      failureMessage: 'The final schema should structure category, bullet text, and review bundle fields cleanly.',
+      successMessage: 'Rất tốt! Schema giờ đã định hình các cột chứa list lồng nhau thành các cấu trúc dữ liệu xịn xò, dễ sử dụng.',
+      failureMessage: 'Bạn cần cấu trúc lại các field như category, bullet text và nhóm review (review bundle) một cách gọn gàng, sạch sẽ.',
     },
     {
       id: 'full-schema-links-and-prices',
       kind: 'python_assert',
-      label: 'keeps URLs and normalized numeric values ready for downstream use',
+      label: 'giữ cho các URL và các giá trị số đã chuẩn hóa sẵn sàng cho các bước xử lý tiếp theo',
       code: [
         'assert all(isinstance(row["discounted_price"], float) for row in sample_valid_rows)',
         'assert all(isinstance(row["actual_price"], float) for row in sample_valid_rows)',
@@ -107,8 +108,8 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
         'assert all(row["img_link"].startswith("https://") for row in sample_valid_rows)',
         'assert all(row["product_link"].startswith("https://") for row in sample_valid_rows)',
       ].join('\n'),
-      successMessage: 'Your final schema is producing silver-ready links and numeric values.',
-      failureMessage: 'The final schema should keep prices normalized and both URLs valid.',
+      successMessage: 'Chuẩn rồi! Schema của bạn đang xuất ra các link và giá trị số đạt chuẩn "silver-ready".',
+      failureMessage: 'Schema cần giữ cho giá tiền luôn được chuẩn hóa và đảm bảo cả hai cột URL đều hợp lệ.',
     },
   ],
   fileCsvConfig: {
@@ -132,9 +133,9 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
     ],
   },
   hints: [
-    'Reuse the parsing ideas from the previous exercises instead of starting from scratch.',
-    'The full row includes list-like text columns such as `category`, `about_product`, `user_id`, and `review_id`.',
-    'Keep `user_name`, `review_title`, and `review_content` as cleaned strings, but make the ID bundles structurally consistent.',
+    'Hãy tái sử dụng lại các logic parse dữ liệu từ những bài tập trước thay vì viết lại từ đầu nhé.',
+    'Toàn bộ dòng dữ liệu sẽ bao gồm cả các cột dạng text nhưng chứa danh sách (list-like) như `category`, `about_product`, `user_id` và `review_id`.',
+    'Giữ `user_name`, `review_title` và `review_content` là các chuỗi đã được clean, nhưng nhớ làm cho các nhóm ID (ID bundles) đồng nhất về mặt cấu trúc nhé.',
   ],
   example: {
     title: 'Example output',
@@ -247,9 +248,9 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
   learningConfig: {
     estimatedMinutes: 15,
     objectives: [
-      'Combine typing, Field constraints, field validators, and model validators in one schema.',
-      'Validate every Amazon CSV column while still producing structured, silver-ready output.',
-      'Treat the full row as a data contract, not just a loose CSV record.',
+      'Kết hợp typing, các ràng buộc Field, field validator và model validator vào chung một schema.',
+      'Validate mọi cột trong file CSV Amazon mà vẫn tạo ra được output có cấu trúc chuẩn "silver-ready".',
+      'Xem toàn bộ dòng dữ liệu như một "data contract" (hợp đồng dữ liệu), chứ không chỉ là một dòng CSV rời rạc.',
     ],
   },
   visualizationConfig: {

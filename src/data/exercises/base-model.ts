@@ -5,7 +5,7 @@ export const baseModelExercise: ExerciseDefinition = {
   title: 'Validate Amazon ratings with BaseModel',
   shortTitle: 'BaseModel',
   description:
-    'Start with the smallest useful schema. Turn a raw Amazon CSV row into a typed object with `product_id`, `product_name`, and `rating`.',
+    'Bắt đầu với schema nhỏ gọn và hữu ích nhất. Chuyển đổi một dòng CSV Amazon ratings thô thành một typed object với `product_id`, `product_name`, và `rating`.',
   editorImports: ['from pydantic import BaseModel'],
   difficulty: 'beginner',
   tags: ['Pydantic', 'BaseModel', 'CSV', 'typing'],
@@ -67,25 +67,25 @@ export const baseModelExercise: ExerciseDefinition = {
     {
       id: 'base-model-counts',
       kind: 'python_assert',
-      label: 'keeps only the malformed rating row out of the typed dataset',
+      label: 'chỉ loại bỏ dòng có rating bị lỗi ra khỏi dataset đã được type',
       code: [
         'assert valid_count == 1464',
         'assert invalid_count == 1',
         'assert invalid_product_ids == ["B08L12N5H1"]',
       ].join('\n'),
-      successMessage: 'Your first schema turns almost the whole CSV into typed rows.',
-      failureMessage: 'Only the malformed rating row should fail in this starter schema.',
+      successMessage: 'Schema đã chuyển gần như toàn bộ CSV thành các dòng có type rõ ràng.',
+      failureMessage: 'Chỉ dòng có rating bị lỗi mới bị fail trong schema này.',
     },
     {
       id: 'base-model-rating-type',
       kind: 'python_assert',
-      label: 'coerces the raw rating string into a float',
+      label: 'ép kiểu chuỗi rating thô thành một float',
       code: [
         'assert all(isinstance(row["rating"], float) for row in sample_valid_rows)',
         'assert all(row["rating_type"] == "float" for row in sample_valid_rows)',
       ].join('\n'),
-      successMessage: 'Pydantic is already turning raw CSV text into useful Python types.',
-      failureMessage: 'The rating field should become a float in the validated samples.',
+      successMessage: 'Pydantic đã tự động chuyển đổi text CSV thô thành các kiểu dữ liệu Python hữu ích.',
+      failureMessage: 'Field rating phải trở thành kiểu float trong các mẫu đã được validate.',
     },
   ],
   fileCsvConfig: {
@@ -97,10 +97,7 @@ export const baseModelExercise: ExerciseDefinition = {
       },
     ],
   },
-  hints: [
-    'Only model the three fields that the template reads from each row.',
-    'Use `float` for `rating` so Pydantic coerces `"4.2"` into `4.2`.',
-  ],
+  hints: ['Sử dụng `float` cho `rating` để Pydantic ép kiểu `"4.2"` thành `4.2`.'],
   example: {
     title: 'Example output',
     code: [
@@ -135,8 +132,7 @@ export const baseModelExercise: ExerciseDefinition = {
   learningConfig: {
     estimatedMinutes: 8,
     objectives: [
-      'Define a minimal schema for one Amazon row with typed scalar fields.',
-      'See how BaseModel plus type annotations already converts CSV strings into Python values.',
+      'Hiểu cách BaseModel kết hợp với type annotation có thể tự động chuyển đổi các chuỗi CSV thành các giá trị Python.',
     ],
   },
   visualizationConfig: {

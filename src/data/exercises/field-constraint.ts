@@ -5,7 +5,7 @@ export const fieldConstraintExercise: ExerciseDefinition = {
   title: 'Constrain Amazon IDs, titles, and category paths with Field(...)',
   shortTitle: 'Field(...)',
   description:
-    'Stay with raw strings, but add declarative rules. This exercise uses `Field(...)` to enforce an exact-length ASIN, a meaningful product title, a category path shape, and a realistic rating range.',
+    'Vẫn sử dụng các raw string, nhưng thêm các quy tắc khai báo (declarative rules). Bài tập này sử dụng `Field(...)` để bắt buộc độ dài chính xác cho ASIN, tiêu đề sản phẩm có ý nghĩa, cấu trúc đường dẫn danh mục (category path), và phạm vi rating thực tế.',
   editorImports: ['from pydantic import BaseModel, Field'],
   difficulty: 'beginner',
   tags: ['Pydantic', 'Field', 'CSV', 'constraints'],
@@ -67,7 +67,7 @@ export const fieldConstraintExercise: ExerciseDefinition = {
   placeholders: [
     {
       id: 'MODEL_SCHEMA',
-      label: 'Define AmazonListingConstrained',
+      label: 'Định nghĩa AmazonListingConstrained',
       defaultCode: ['class AmazonListingConstrained(BaseModel):', '    pass'].join(
         '\n',
       ),
@@ -77,34 +77,34 @@ export const fieldConstraintExercise: ExerciseDefinition = {
     {
       id: 'field-constraint-counts',
       kind: 'python_assert',
-      label: 'keeps the same malformed rating row out of the constrained dataset',
+      label: 'loại bỏ đúng dòng có rating bị lỗi ra khỏi dataset đã được constrain',
       code: [
         'assert valid_count == 1464',
         'assert invalid_count == 1',
         'assert invalid_product_ids == ["B08L12N5H1"]',
       ].join('\n'),
-      successMessage: 'Your declarative constraints stay focused while keeping the malformed row out.',
-      failureMessage: 'This exercise should still reject only the malformed rating row.',
+      successMessage: 'Các declarative constraint hoạt động đúng trọng tâm trong khi vẫn loại bỏ được dòng bị lỗi.',
+      failureMessage: 'Bài tập này vẫn chỉ nên reject duy nhất dòng có rating bị lỗi.',
     },
     {
       id: 'field-constraint-shape',
       kind: 'python_assert',
-      label: 'enforces exact-length IDs and category path shape',
+      label: 'bắt buộc ID có độ dài chính xác và đúng cấu trúc category path',
       code: [
         'assert all(length == 10 for length in product_id_lengths)',
         'assert all(length >= 16 for length in product_name_lengths)',
         'assert all(category_path_flags)',
       ].join('\n'),
-      successMessage: 'Your Field rules are shaping the raw strings without custom validators.',
-      failureMessage: 'ASIN length, title length, and category-path shape should all be enforced declaratively.',
+      successMessage: 'Các quy tắc Field đang định hình các raw string mà không cần dùng đến custom validator.',
+      failureMessage: 'Độ dài ASIN, độ dài title và cấu trúc category-path đều phải được bắt buộc bằng các declarative constraint.',
     },
     {
       id: 'field-constraint-rating',
       kind: 'python_assert',
-      label: 'keeps ratings inside the expected range',
+      label: 'giữ rating nằm trong phạm vi dự kiến',
       code: 'assert all(0.0 <= rating <= 5.0 for rating in rating_values)',
-      successMessage: 'Your rating bounds are working.',
-      failureMessage: 'Ratings in the validated sample should stay between 0 and 5.',
+      successMessage: 'Giới hạn rating đang hoạt động tốt.',
+      failureMessage: 'Rating trong các sample được validate phải nằm trong khoảng từ 0 đến 5.',
     },
   ],
   fileCsvConfig: {
@@ -117,9 +117,9 @@ export const fieldConstraintExercise: ExerciseDefinition = {
     ],
   },
   hints: [
-    'Use `Field(min_length=10, max_length=10)` for the ASIN-like `product_id`.',
-    'Use a `pattern=` constraint so `category` must still look like a path with `|` separators.',
-    'Use `Field(ge=0, le=5)` for `rating`.',
+    'Sử dụng `Field(min_length=10, max_length=10)` cho `product_id` có dạng ASIN.',
+    'Sử dụng ràng buộc `pattern=` để `category` vẫn phải trông giống một đường dẫn với các dấu phân cách `|`.',
+    'Sử dụng `Field(ge=0, le=5)` cho `rating`.',
   ],
   example: {
     title: 'Example output',
@@ -156,8 +156,8 @@ export const fieldConstraintExercise: ExerciseDefinition = {
   learningConfig: {
     estimatedMinutes: 8,
     objectives: [
-      'Use Field(...) for exact length, regex-like string shape, and numeric bounds.',
-      'See the difference between basic typing and declarative constraints.',
+      'Sử dụng Field(...) cho độ dài chính xác, định dạng chuỗi giống regex và các giới hạn số học.',
+      'Hiểu sự khác biệt giữa basic typing và declarative constraint.',
     ],
   },
   visualizationConfig: {
