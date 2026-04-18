@@ -1,4 +1,5 @@
 import type { ExerciseDefinition } from '../../types/exercise';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface ExerciseListProps {
   exercises: ExerciseDefinition[];
@@ -11,11 +12,13 @@ export function ExerciseList({
   selectedExerciseId,
   onSelect,
 }: ExerciseListProps) {
+  const { messages } = useI18n();
+
   return (
     <aside className="rounded-[28px] border border-white/10 bg-slate-950/70 p-4 shadow-2xl shadow-slate-950/40 backdrop-blur">
       <div className="border-b border-white/10 pb-4">
         <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
-          Exercises
+          {messages.exerciseList.title}
         </p>
       </div>
 
@@ -42,7 +45,7 @@ export function ExerciseList({
                 </span>
                 {exercise.difficulty ? (
                   <span className="rounded-full border border-white/10 px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300">
-                    {exercise.difficulty}
+                    {messages.exerciseList.difficulty[exercise.difficulty]}
                   </span>
                 ) : null}
               </div>

@@ -164,6 +164,6 @@ export const fieldConstraintExercise: ExerciseDefinition = {
     modelClassName: 'AmazonListingConstrained',
     modelPlaceholderId: 'MODEL_SCHEMA',
     fieldOrder: ['product_id', 'product_name', 'category', 'rating'],
-    maxVisualizedRows: 4,
+    maxVisualizedRows: 3,
   },
 };

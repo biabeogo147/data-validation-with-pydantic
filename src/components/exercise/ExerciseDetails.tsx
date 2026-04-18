@@ -1,11 +1,18 @@
 import { CsvPreviewPanel } from './CsvPreviewPanel';
 import type { ExerciseDefinition } from '../../types/exercise';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface ExerciseDetailsProps {
   exercise: ExerciseDefinition;
 }
 
 export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
+  const { messages } = useI18n();
+  const exampleTitle =
+    exercise.example?.title === 'Example output'
+      ? messages.exerciseDetails.exampleOutput
+      : exercise.example?.title ?? messages.exerciseDetails.exampleOutput;
+
   return (
     <section className="rounded-[28px] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-slate-950/20 backdrop-blur">
       <div className="flex flex-wrap items-center gap-3">
@@ -14,7 +21,9 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
         </p>
         {exercise.learningConfig?.estimatedMinutes ? (
           <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-slate-300">
-            {exercise.learningConfig.estimatedMinutes} min
+            {messages.exerciseDetails.minutes(
+              exercise.learningConfig.estimatedMinutes,
+            )}
           </span>
         ) : null}
       </div>
@@ -29,7 +38,7 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
       {exercise.learningConfig?.objectives?.length ? (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            Learning Goals
+            {messages.exerciseDetails.learningGoals}
           </h2>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
             {exercise.learningConfig.objectives.map((objective) => (
@@ -44,7 +53,7 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
       {exercise.hints?.length ? (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            Hints
+            {messages.exerciseDetails.hints}
           </h2>
           <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
             {exercise.hints.map((hint) => (
@@ -61,7 +70,7 @@ export function ExerciseDetails({ exercise }: ExerciseDetailsProps) {
       {exercise.example ? (
         <div className="mt-6">
           <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            {exercise.example.title ?? 'Example output'}
+            {exampleTitle}
           </h2>
           {exercise.example.description ? (
             <p className="mt-3 text-sm leading-6 text-slate-400">

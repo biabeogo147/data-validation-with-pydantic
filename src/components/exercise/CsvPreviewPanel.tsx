@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getFixtureMounts } from '../../lib/exercise-runner';
 import { getRuntimeBasePath } from '../../lib/github-pages';
 import type { ExerciseCsvFile, ExerciseDefinition } from '../../types/exercise';
+import { useI18n } from '../../i18n/I18nProvider';
 
 interface CsvPreviewPanelProps {
   exercise: ExerciseDefinition;
@@ -146,6 +147,7 @@ export function CsvPreviewTable({
   fileCsvPath,
   preview,
 }: CsvPreviewTableProps) {
+  const { messages } = useI18n();
   const gridTemplateColumns = `72px repeat(${preview.totalColumns}, ${PREVIEW_COLUMN_WIDTH})`;
 
   return (
@@ -153,15 +155,18 @@ export function CsvPreviewTable({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
-            Showing {preview.totalColumns} / {preview.totalAvailableColumns} columns
+            {messages.csvPreview.showingColumns(
+              preview.totalColumns,
+              preview.totalAvailableColumns,
+            )}
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
-            {preview.totalDataRows.toLocaleString()} rows
+            {messages.csvPreview.totalRows(preview.totalDataRows)}
           </span>
           <span className="rounded-full border border-cyan-400/15 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-100">
             {preview.isTruncated
-              ? `Showing first ${preview.shownDataRows} rows`
-              : `Showing all ${preview.shownDataRows} rows`}
+              ? messages.csvPreview.showingFirstRows(preview.shownDataRows)
+              : messages.csvPreview.showingAllRows(preview.shownDataRows)}
           </span>
         </div>
 
@@ -170,7 +175,7 @@ export function CsvPreviewTable({
           download={getDownloadFileName(fileCsvPath)}
           href={downloadUrl}
         >
-          Download CSV
+          {messages.csvPreview.download}
         </a>
       </div>
 
@@ -181,7 +186,7 @@ export function CsvPreviewTable({
             style={{ gridTemplateColumns }}
           >
             <div className="px-3 py-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-              Row
+              {messages.csvPreview.rowHeader}
             </div>
             {preview.headers.map((header) => (
               <div key={header} className="min-w-0 px-3 py-3">
@@ -222,8 +227,7 @@ export function CsvPreviewTable({
 
       {preview.isTruncated ? (
         <p className="mt-4 text-sm leading-6 text-slate-400">
-          The table is shortened for faster reading on the web. Use Download CSV to
-          inspect the full dataset.
+          {messages.csvPreview.shortenedNote}
         </p>
       ) : null}
     </div>
@@ -231,6 +235,7 @@ export function CsvPreviewTable({
 }
 
 export function CsvPreviewPanel({ exercise }: CsvPreviewPanelProps) {
+  const { messages } = useI18n();
   const fixtures = useMemo(
     () => getFixtureMounts(exercise, getRuntimeBasePath()),
     [exercise],
@@ -314,10 +319,10 @@ export function CsvPreviewPanel({ exercise }: CsvPreviewPanelProps) {
       <div>
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            CSV Preview
+            {messages.csvPreview.title}
           </h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">
-            Inspect a readable preview of the repo CSV before you run the exercise.
+            {messages.csvPreview.description}
           </p>
         </div>
       </div>
@@ -357,12 +362,12 @@ export function CsvPreviewPanel({ exercise }: CsvPreviewPanelProps) {
             />
           ) : (
             <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-slate-950/80 p-4 font-mono text-xs leading-6 text-cyan-50">
-              Loading CSV...
+              {messages.csvPreview.loading}
             </pre>
           )
         ) : (
           <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-white/10 bg-slate-950/80 p-4 font-mono text-xs leading-6 text-cyan-50">
-            No CSV file configured.
+            {messages.csvPreview.noCsvConfigured}
           </pre>
         )}
       </div>

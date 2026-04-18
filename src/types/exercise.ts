@@ -58,7 +58,7 @@ export interface ExerciseVisualizationConfig {
   modelPlaceholderId: string;
   csvFileId?: string;
   fieldOrder?: string[];
-  visibleColumns?: string[];
+  maxVisibleColumns?: number;
   maxVisualizedRows?: number;
 }
 

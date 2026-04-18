@@ -212,13 +212,7 @@ export const modelValidatorExercise: ExerciseDefinition = {
       'rating',
       'rating_count',
     ],
-    visibleColumns: [
-      'product_id',
-      'discounted_price',
-      'actual_price',
-      'discount_percentage',
-      'rating_count',
-    ],
-    maxVisualizedRows: 4,
+    maxVisibleColumns: 4,
+    maxVisualizedRows: 3,
   },
 };

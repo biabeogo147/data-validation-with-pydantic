@@ -19,7 +19,7 @@ export interface VisualizationRequest {
   modelCode: string;
   csvMountPath: string;
   fieldSequence: string[];
-  visibleColumns: string[];
+  maxVisibleColumns: number | null;
   maxVisualizedRows: number | null;
   highlights: Record<string, ModelFieldHighlight>;
   pythonSource: string;
@@ -288,19 +288,16 @@ function inferFieldSequenceFromModelCode(modelCode: string): string[] {
     .filter((fieldName): fieldName is string => Boolean(fieldName));
 }
 
-function sanitizeVisibleColumns(
-  configuredVisibleColumns: string[] | undefined,
-  fallbackColumns: string[],
-): string[] {
-  const columns = configuredVisibleColumns?.length
-    ? configuredVisibleColumns
-    : fallbackColumns;
-
-  return Array.from(new Set(columns.filter(Boolean)));
-}
-
 function sanitizeMaxVisualizedRows(value: number | undefined): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+}
+
+function sanitizeMaxVisibleColumns(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
     return null;
   }
 
@@ -436,9 +433,8 @@ export function buildVisualizationRequest(
   const fieldSequence =
     visualizationConfig.fieldOrder ??
     inferFieldSequenceFromModelCode(modelCode);
-  const visibleColumns = sanitizeVisibleColumns(
-    visualizationConfig.visibleColumns,
-    fieldSequence,
+  const maxVisibleColumns = sanitizeMaxVisibleColumns(
+    visualizationConfig.maxVisibleColumns,
   );
   const maxVisualizedRows = sanitizeMaxVisualizedRows(
     visualizationConfig.maxVisualizedRows,
@@ -458,7 +454,7 @@ export function buildVisualizationRequest(
     modelCode,
     csvMountPath,
     fieldSequence,
-    visibleColumns,
+    maxVisibleColumns,
     maxVisualizedRows,
     highlights,
     pythonSource: buildVisualizationPythonSource(

@@ -2,16 +2,23 @@ import {
   getVisibleRowResults,
   type ModelFieldHighlight,
 } from '../../lib/validation-visualizer';
+import { getPlaybackControlsState } from '../../lib/visualizer-playback';
 import type {
   ValidationVisualizerState,
   VisualizationPlaybackSpeed,
 } from '../../hooks/useValidationVisualizer';
+import { useI18n } from '../../i18n/I18nProvider';
+import type { AppMessages } from '../../i18n/messages';
 import type { ExerciseRunResult } from '../../types/exercise';
 
 interface ValidationVisualizerModalProps {
   state: ValidationVisualizerState;
   onClose: () => void;
   onSkip: () => void;
+  onVisualize: () => void;
+  onPauseToggle: () => void;
+  onPreviousStep: () => void;
+  onNextStep: () => void;
   onStartPlayback: (speed: VisualizationPlaybackSpeed) => void;
 }
 
@@ -38,13 +45,9 @@ function formatValue(value: unknown) {
 
 const valuePreClassName =
   'mt-2 max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-all text-sm leading-6 text-slate-100';
-const currentRowValueTextClassName =
-  'mt-2 block max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm leading-6 text-slate-100';
 
 const MAX_PREVIEW_STRING_LENGTH = 120;
-const MAX_CURRENT_ROW_STRING_LENGTH = 72;
-const CURRENT_ROW_FULL_WIDTH_THRESHOLD = 60;
-const CURRENT_ROW_FULL_WIDTH_LABEL_THRESHOLD = 10;
+const MAX_CURRENT_ROW_STRING_LENGTH = 84;
 const MAX_FULL_MODEL_CODE_LINES = 10;
 
 function formatCurrentRowValue(value: unknown) {
@@ -85,24 +88,24 @@ function clipValue(
 
 function filterRecordColumns(
   record: Record<string, unknown> | null | undefined,
-  visibleColumns: string[],
+  columns: string[],
 ) {
   if (!record) {
     return null;
   }
 
-  if (visibleColumns.length === 0) {
+  if (columns.length === 0) {
     return record;
   }
 
   return Object.fromEntries(
-    visibleColumns
+    columns
       .filter((column) => column in record)
       .map((column) => [column, record[column]]),
   );
 }
 
-function getDisplayColumns(
+function getOrderedValidatedColumns(
   rawRows: Record<string, string>[],
   request: ValidationVisualizerState['request'],
 ) {
@@ -110,34 +113,68 @@ function getDisplayColumns(
     ? Object.keys(rawRows[0])
     : request?.fieldSequence ?? [];
   const configuredColumns =
-    request?.visibleColumns && request.visibleColumns.length > 0
-      ? request.visibleColumns
+    request?.fieldSequence && request.fieldSequence.length > 0
+      ? request.fieldSequence
       : availableColumns;
-  const visibleColumns = Array.from(new Set(configuredColumns.filter(Boolean)));
-
-  return {
-    visibleColumns: visibleColumns.length > 0 ? visibleColumns : availableColumns,
-    totalColumns: availableColumns.length > 0 ? availableColumns.length : visibleColumns.length,
-  };
-}
-
-function getCurrentRowDisplayColumns(
-  rawRows: Record<string, string>[],
-  request: ValidationVisualizerState['request'],
-) {
-  const availableColumns = rawRows[0]
-    ? Object.keys(rawRows[0])
-    : request?.fieldSequence ?? [];
-  const prioritizedColumns = request
-    ? [...request.fieldSequence, ...(request.visibleColumns ?? [])]
-    : availableColumns;
-  const visibleColumns = Array.from(new Set(prioritizedColumns.filter(Boolean))).filter(
+  const visibleColumns = Array.from(new Set(configuredColumns.filter(Boolean))).filter(
     (column) => availableColumns.length === 0 || availableColumns.includes(column),
   );
 
   return {
     visibleColumns: visibleColumns.length > 0 ? visibleColumns : availableColumns,
-    totalColumns: availableColumns.length > 0 ? availableColumns.length : visibleColumns.length,
+    totalColumns:
+      configuredColumns.length > 0
+        ? configuredColumns.length
+        : visibleColumns.length > 0
+          ? visibleColumns.length
+          : availableColumns.length,
+  };
+}
+
+function getDisplayColumns(
+  rawRows: Record<string, string>[],
+  request: ValidationVisualizerState['request'],
+) {
+  return getOrderedValidatedColumns(rawRows, request);
+}
+
+function getCurrentRowDisplayColumns(
+  rawRows: Record<string, string>[],
+  request: ValidationVisualizerState['request'],
+  currentStep: ValidationVisualizerState['steps'][number] | null,
+) {
+  const { visibleColumns: orderedColumns, totalColumns } = getOrderedValidatedColumns(
+    rawRows,
+    request,
+  );
+
+  if (!request || request.maxVisibleColumns === null) {
+    return {
+      visibleColumns: orderedColumns,
+      totalColumns,
+    };
+  }
+
+  const maxVisibleColumns = Math.max(1, request.maxVisibleColumns);
+
+  if (orderedColumns.length <= maxVisibleColumns) {
+    return {
+      visibleColumns: orderedColumns,
+      totalColumns,
+    };
+  }
+
+  const activeFieldIndex = currentStep
+    ? Math.max(orderedColumns.indexOf(currentStep.fieldName), 0)
+    : 0;
+  const startIndex = currentStep
+    ? Math.max(0, activeFieldIndex - maxVisibleColumns + 1)
+    : 0;
+  const endIndex = Math.min(orderedColumns.length, startIndex + maxVisibleColumns);
+
+  return {
+    visibleColumns: orderedColumns.slice(startIndex, endIndex),
+    totalColumns,
   };
 }
 
@@ -151,6 +188,22 @@ function getRunStatusBadgeClasses(status: 'running' | ExerciseRunResult['status'
       return 'border-rose-400/40 bg-rose-500/10 text-rose-200';
     case 'running':
       return 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100';
+  }
+}
+
+function getRunStatusLabel(
+  status: 'running' | ExerciseRunResult['status'],
+  messages: AppMessages,
+) {
+  switch (status) {
+    case 'pass':
+      return messages.common.pass;
+    case 'fail':
+      return messages.common.fail;
+    case 'error':
+      return messages.visualizer.error;
+    case 'running':
+      return messages.common.running;
   }
 }
 
@@ -217,7 +270,7 @@ function buildCodeSnippet(
   return snippet;
 }
 
-function getFocusedWalkthroughRowIndex({
+function getFocusedWalkthroughRow({
   rawRows,
   currentStep,
 }: {
@@ -225,40 +278,27 @@ function getFocusedWalkthroughRowIndex({
   currentStep: ValidationVisualizerState['steps'][number] | null;
 }) {
   if (rawRows.length === 0) {
-    return -1;
+    return null;
   }
 
-  if (currentStep) {
-    return Math.min(currentStep.rowIndex, rawRows.length - 1);
-  }
+  const rowIndex = currentStep
+    ? Math.min(currentStep.rowIndex, rawRows.length - 1)
+    : 0;
 
-  return 0;
-}
-
-function shouldRenderCurrentRowValueFullWidth(value: unknown) {
-  if (typeof value === 'string') {
-    return value.length > CURRENT_ROW_FULL_WIDTH_THRESHOLD;
-  }
-
-  const serializedValue =
-    value === null || value === undefined ? '' : JSON.stringify(value);
-
-  return (serializedValue?.length ?? 0) > CURRENT_ROW_FULL_WIDTH_THRESHOLD;
-}
-
-function shouldRenderCurrentRowCardFullWidth(column: string, value: unknown) {
-  return (
-    column.length >= CURRENT_ROW_FULL_WIDTH_LABEL_THRESHOLD ||
-    shouldRenderCurrentRowValueFullWidth(value)
-  );
+  return {
+    rowIndex,
+    row: rawRows[rowIndex],
+  };
 }
 
 function renderExerciseResultSection({
   detail,
   result,
+  messages,
 }: {
   detail: string;
   result: ExerciseRunResult | null;
+  messages: AppMessages;
 }) {
   const status = result?.status ?? 'running';
 
@@ -267,10 +307,10 @@ function renderExerciseResultSection({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
-            Final Result
+            {messages.visualizer.finalResultEyebrow}
           </p>
           <h3 className="mt-3 text-2xl font-semibold text-white">
-            Exercise result
+            {messages.visualizer.finalResultTitle}
           </h3>
         </div>
         <span
@@ -278,7 +318,7 @@ function renderExerciseResultSection({
             status,
           )}`}
         >
-          {status}
+          {getRunStatusLabel(status, messages)}
         </span>
       </div>
 
@@ -304,7 +344,7 @@ function renderExerciseResultSection({
                       : 'bg-amber-500/15 text-amber-200'
                   }`}
                 >
-                  {check.passed ? 'pass' : 'fail'}
+                  {check.passed ? messages.common.pass : messages.common.fail}
                 </span>
               </div>
               <p className="mt-3 text-sm leading-6 text-slate-300">{check.message}</p>
@@ -321,7 +361,7 @@ function renderExerciseResultSection({
       {result?.stderr ? (
         <div className="mt-6">
           <h4 className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-300">
-            Stderr / Error
+            {messages.visualizer.stderrTitle}
           </h4>
           <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-2xl border border-rose-400/20 bg-rose-950/40 p-4 text-xs leading-6 text-rose-100">
             {result.stderr}
@@ -340,19 +380,21 @@ function renderWholeFileResultSection({
   totalRows,
   maxDisplayedRows,
   emptyMessage,
+  messages,
 }: {
   rawRows: Record<string, string>[];
   rowResults: {
     rowIndex: number;
     passed: boolean;
-      validatedRow: Record<string, unknown> | null;
-      errors: string[];
+    validatedRow: Record<string, unknown> | null;
+    errors: string[];
   }[];
   pendingRows: number;
   visibleColumns: string[];
   totalRows: number;
   maxDisplayedRows: number | null;
   emptyMessage: string;
+  messages: AppMessages;
 }) {
   const displayedRowResults =
     maxDisplayedRows === null ? rowResults : rowResults.slice(0, maxDisplayedRows);
@@ -367,44 +409,44 @@ function renderWholeFileResultSection({
     maxDisplayedRows !== null && totalRows > maxDisplayedRows
       ? totalRows - maxDisplayedRows
       : 0;
-  const hiddenPreviewLabel = hiddenPreviewCount === 1 ? 'row' : 'rows';
   const hiddenFailedPreviewCount =
     displayedFailedRowResults.length < failedRows
       ? failedRows - displayedFailedRowResults.length
       : 0;
-  const hiddenFailedPreviewLabel =
-    hiddenFailedPreviewCount === 1 ? 'row' : 'rows';
 
   return (
     <section className="mt-8 min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
-            Whole File Result
+            {messages.visualizer.wholeFileEyebrow}
           </p>
           <h3 className="mt-3 text-2xl font-semibold text-white">
-            Validation results across the full CSV
+            {messages.visualizer.wholeFileTitle}
           </h3>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <span className="rounded-full border border-emerald-400/25 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
-            Passed rows: {passedRows}
+            {messages.visualizer.passedRows(passedRows)}
           </span>
           <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
-            Failed rows: {failedRows}
+            {messages.visualizer.failedRows(failedRows)}
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-            Showing {displayedRowResults.length} / {totalRows} rows
+            {messages.visualizer.showingResultRows(
+              displayedRowResults.length,
+              totalRows,
+            )}
           </span>
           <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-            Pending rows: {pendingRows}
+            {messages.visualizer.pendingRows(pendingRows)}
           </span>
         </div>
       </div>
 
       {displayedRowResults.length > 0 ? (
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {displayedRowResults.map((rowResult) => {
             const rawRow = rawRows[rowResult.rowIndex];
             const filteredRawRow = filterRecordColumns(rawRow, visibleColumns);
@@ -424,7 +466,7 @@ function renderWholeFileResultSection({
               >
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-base font-semibold text-white">
-                    Row {rowResult.rowIndex + 1}
+                    {messages.visualizer.rowLabel(rowResult.rowIndex)}
                   </p>
                   <span
                     className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
@@ -433,14 +475,16 @@ function renderWholeFileResultSection({
                         : 'bg-amber-500/15 text-amber-100'
                     }`}
                   >
-                    {rowResult.passed ? 'valid' : 'invalid'}
+                    {rowResult.passed
+                      ? messages.visualizer.rowValid
+                      : messages.visualizer.rowInvalid}
                   </span>
                 </div>
 
                 <div className="mt-4 grid min-w-0 gap-3">
                   <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      Raw CSV row
+                      {messages.visualizer.rawCsvRow}
                     </p>
                     <pre className={valuePreClassName}>
                       {formatValue(filteredRawRow)}
@@ -449,7 +493,7 @@ function renderWholeFileResultSection({
 
                   <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      Validation result
+                      {messages.visualizer.validationResult}
                     </p>
                     <pre className={valuePreClassName}>
                       {rowResult.passed
@@ -468,9 +512,10 @@ function renderWholeFileResultSection({
                 ...
               </p>
               <p className="mt-4 text-sm leading-7 text-slate-300">
-                ... {hiddenPreviewCount} more {hiddenPreviewLabel} are hidden from
-                this preview. The walkthrough shows only the first{' '}
-                {maxDisplayedRows} rows here.
+                {messages.visualizer.hiddenRowsSummary(
+                  hiddenPreviewCount,
+                  maxDisplayedRows ?? displayedRowResults.length,
+                )}
               </p>
             </article>
           ) : null}
@@ -486,18 +531,21 @@ function renderWholeFileResultSection({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-amber-200">
-                Failed Rows
+                {messages.visualizer.failedRowsEyebrow}
               </p>
               <h4 className="mt-3 text-lg font-semibold text-white">
-                Rows that raised validation errors
+                {messages.visualizer.failedRowsTitle}
               </h4>
             </div>
             <span className="rounded-full border border-amber-400/25 bg-amber-500/10 px-4 py-2 text-sm text-amber-100">
-              Showing {displayedFailedRowResults.length} / {failedRows} failed rows
+              {messages.visualizer.showingFailedRows(
+                displayedFailedRowResults.length,
+                failedRows,
+              )}
             </span>
           </div>
 
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {displayedFailedRowResults.map((rowResult) => {
               const rawRow = rawRows[rowResult.rowIndex];
               const filteredRawRow = filterRecordColumns(rawRow, visibleColumns);
@@ -509,17 +557,17 @@ function renderWholeFileResultSection({
                 >
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-base font-semibold text-white">
-                      Row {rowResult.rowIndex + 1}
+                      {messages.visualizer.rowLabel(rowResult.rowIndex)}
                     </p>
                     <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs uppercase tracking-[0.22em] text-amber-100">
-                      invalid
+                      {messages.visualizer.rowInvalid}
                     </span>
                   </div>
 
                   <div className="mt-4 grid min-w-0 gap-3">
                     <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Raw CSV row
+                        {messages.visualizer.rawCsvRow}
                       </p>
                       <pre className={valuePreClassName}>
                         {formatValue(filteredRawRow)}
@@ -528,7 +576,7 @@ function renderWholeFileResultSection({
 
                     <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Validation errors
+                        {messages.visualizer.validationErrors}
                       </p>
                       <pre className={valuePreClassName}>
                         {formatValue(rowResult.errors)}
@@ -545,8 +593,9 @@ function renderWholeFileResultSection({
                   ...
                 </p>
                 <p className="mt-4 text-sm leading-7 text-amber-50/90">
-                  ... {hiddenFailedPreviewCount} more failed {hiddenFailedPreviewLabel}{' '}
-                  are hidden from this preview.
+                  {messages.visualizer.hiddenFailedRowsSummary(
+                    hiddenFailedPreviewCount,
+                  )}
                 </p>
               </article>
             ) : null}
@@ -572,8 +621,14 @@ export function ValidationVisualizerModal({
   state,
   onClose,
   onSkip,
+  onVisualize,
+  onPauseToggle,
+  onPreviousStep,
+  onNextStep,
   onStartPlayback,
 }: ValidationVisualizerModalProps) {
+  const { messages } = useI18n();
+
   if (!state.isOpen) {
     return null;
   }
@@ -586,10 +641,10 @@ export function ValidationVisualizerModal({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
-                  Validation Walkthrough
+                  {messages.visualizer.walkthroughEyebrow}
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold text-white">
-                  Choose how to play the full CSV validation demo
+                  {messages.visualizer.walkthroughChoiceTitle}
                 </h2>
                 <p className="mt-4 text-sm leading-7 text-slate-300">
                   {state.detail}
@@ -600,35 +655,26 @@ export function ValidationVisualizerModal({
                 type="button"
                 onClick={onClose}
               >
-                Close
+                {messages.common.close}
               </button>
             </div>
 
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {(['1x', '2x', '4x'] as VisualizationPlaybackSpeed[]).map(
-                (speed) => (
-                  <button
-                    key={speed}
-                    className="rounded-3xl border border-cyan-400/20 bg-cyan-500/10 p-5 text-left transition hover:border-cyan-300 hover:bg-cyan-500/18"
-                    type="button"
-                    onClick={() => {
-                      onStartPlayback(speed);
-                    }}
-                  >
-                    <p className="text-xs uppercase tracking-[0.24em] text-cyan-200">
-                      Playback
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold text-white">{speed}</p>
-                    <p className="mt-3 text-sm leading-6 text-slate-300">
-                      {speed === '1x'
-                        ? 'One field every second.'
-                        : speed === '2x'
-                          ? 'A faster half-second walkthrough per field.'
-                          : 'Quick teaching playback at quarter-second steps.'}
-                    </p>
-                  </button>
-                ),
-              )}
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <button
+                className="rounded-3xl border border-cyan-400/20 bg-cyan-500/10 p-5 text-left transition hover:border-cyan-300 hover:bg-cyan-500/18"
+                type="button"
+                onClick={onVisualize}
+              >
+                <p className="text-xs uppercase tracking-[0.24em] text-cyan-200">
+                  {messages.visualizer.walkthroughEyebrow}
+                </p>
+                <p className="mt-3 text-3xl font-semibold text-white">
+                  {messages.visualizer.visualizeLabel}
+                </p>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  {messages.visualizer.visualizeDescription}
+                </p>
+              </button>
 
               <button
                 className="rounded-3xl border border-white/10 bg-white/5 p-5 text-left transition hover:border-white/25 hover:bg-white/10"
@@ -636,12 +682,13 @@ export function ValidationVisualizerModal({
                 onClick={onSkip}
               >
                 <p className="text-xs uppercase tracking-[0.24em] text-slate-300">
-                  Direct Run
+                  {messages.visualizer.directRunLabel}
                 </p>
-                <p className="mt-3 text-3xl font-semibold text-white">Skip</p>
+                <p className="mt-3 text-3xl font-semibold text-white">
+                  {messages.visualizer.skipLabel}
+                </p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Run the full validation immediately without the visual teaching
-                  flow.
+                  {messages.visualizer.directRunDescription}
                 </p>
               </button>
             </div>
@@ -666,10 +713,10 @@ export function ValidationVisualizerModal({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">
               <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
-                Validation Result
+                {messages.visualizer.directResultEyebrow}
               </p>
               <h2 className="mt-3 text-3xl font-semibold text-white">
-                Full CSV validation without the walkthrough
+                {messages.visualizer.directResultTitle}
               </h2>
               <p className="mt-4 text-sm leading-7 text-slate-300">
                 {state.detail}
@@ -682,14 +729,14 @@ export function ValidationVisualizerModal({
                   directStatus,
                 )}`}
               >
-                {directStatus}
+                {getRunStatusLabel(directStatus, messages)}
               </span>
               <button
                 className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/5"
                 type="button"
                 onClick={onClose}
               >
-                Close
+                {messages.common.close}
               </button>
             </div>
           </div>
@@ -707,8 +754,8 @@ export function ValidationVisualizerModal({
             visibleColumns,
             totalRows: state.rawRows.length,
             maxDisplayedRows,
-            emptyMessage:
-              'The row-level results will appear here as soon as the direct validation finishes.',
+            emptyMessage: messages.visualizer.directResultEmpty,
+            messages,
           })}
         </div>
       </div>
@@ -722,10 +769,10 @@ export function ValidationVisualizerModal({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.28em] text-rose-300">
-                Visualization Error
+                {messages.visualizer.preparedErrorEyebrow}
               </p>
               <h2 className="mt-3 text-3xl font-semibold text-white">
-                The walkthrough could not be prepared
+                {messages.visualizer.preparedErrorTitle}
               </h2>
               <p className="mt-4 text-sm leading-7 text-slate-300">
                 {state.error ?? state.detail}
@@ -736,7 +783,7 @@ export function ValidationVisualizerModal({
               type="button"
               onClick={onClose}
             >
-              Close
+              {messages.common.close}
             </button>
           </div>
         </div>
@@ -756,9 +803,10 @@ export function ValidationVisualizerModal({
     state.rawRows,
     state.request,
   );
-  const { visibleColumns: csvColumns, totalColumns } = getCurrentRowDisplayColumns(
+  const { visibleColumns: csvColumns } = getCurrentRowDisplayColumns(
     state.rawRows,
     state.request,
+    currentStep,
   );
   const visibleRowResults = getVisibleRowResults(
     state.rowResults,
@@ -774,19 +822,21 @@ export function ValidationVisualizerModal({
     state.request.maxVisualizedRows === null
       ? state.rawRows.length
       : Math.min(state.request.maxVisualizedRows, state.rawRows.length);
-  const focusedRowIndex = getFocusedWalkthroughRowIndex({
+  const focusedRow = getFocusedWalkthroughRow({
     rawRows: state.rawRows,
     currentStep,
   });
-  const focusedRawRow =
-    focusedRowIndex >= 0 ? state.rawRows[focusedRowIndex] : null;
-  const focusedRowResult =
-    focusedRowIndex >= 0 ? rowResultMap.get(focusedRowIndex) : undefined;
+  const focusedRowResult = focusedRow ? rowResultMap.get(focusedRow.rowIndex) : null;
   const shouldShowExerciseResult =
     Boolean(state.runResult) ||
     (state.mode === 'walkthrough' &&
       state.status === 'loading' &&
       state.currentStepIndex >= 0);
+  const playbackControls = getPlaybackControlsState({
+    currentStepIndex: state.currentStepIndex,
+    totalSteps: state.steps.length,
+    isPlaybackPaused: state.isPlaybackPaused,
+  });
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/85 px-4 py-6 backdrop-blur-md">
@@ -794,10 +844,10 @@ export function ValidationVisualizerModal({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-3xl">
             <p className="text-xs uppercase tracking-[0.28em] text-cyan-300">
-              Validation Walkthrough
+              {messages.visualizer.walkthroughEyebrow}
             </p>
             <h2 className="mt-3 text-3xl font-semibold text-white">
-              {state.request.modelClassName} validates the full CSV file
+              {messages.visualizer.walkthroughTitle(state.request.modelClassName)}
             </h2>
             <p className="mt-4 text-sm leading-7 text-slate-300">{state.detail}</p>
           </div>
@@ -806,20 +856,75 @@ export function ValidationVisualizerModal({
             {state.request.maxVisualizedRows !== null &&
             state.rawRows.length > state.request.maxVisualizedRows ? (
               <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-                Animating {animatedRowCount} / {state.rawRows.length} rows
+                {messages.visualizer.animatedRows(
+                  animatedRowCount,
+                  state.rawRows.length,
+                )}
               </span>
             ) : null}
-            {state.speed ? (
-              <span className="rounded-full border border-cyan-400/30 bg-cyan-500/12 px-4 py-2 text-sm font-semibold text-cyan-100">
-                {state.speed}
-              </span>
+            {state.status === 'playing' ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  {messages.visualizer.playbackLabel}
+                </span>
+                {(['1x', '2x', '4x'] as VisualizationPlaybackSpeed[]).map((speed) => {
+                  const isActive = state.speed === speed;
+
+                  return (
+                    <button
+                      key={speed}
+                      className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                        isActive
+                          ? 'border-cyan-400/30 bg-cyan-500/12 text-cyan-100'
+                          : 'border-white/10 text-slate-200 hover:border-white/25 hover:bg-white/5'
+                      }`}
+                      type="button"
+                      onClick={() => {
+                        onStartPlayback(speed);
+                      }}
+                    >
+                      {speed}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {state.status === 'playing' && state.steps.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-white/25 hover:bg-white/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:text-slate-500"
+                  disabled={!playbackControls.canPrevious}
+                  type="button"
+                  onClick={onPreviousStep}
+                >
+                  {messages.visualizer.previousLabel}
+                </button>
+                <button
+                  className="rounded-full border border-cyan-400/30 bg-cyan-500/12 px-4 py-2 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-500/18 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-white/5 disabled:text-slate-500"
+                  disabled={!playbackControls.canPauseToggle}
+                  type="button"
+                  onClick={onPauseToggle}
+                >
+                  {playbackControls.isPlaybackPaused
+                    ? messages.visualizer.resumeLabel
+                    : messages.visualizer.pauseLabel}
+                </button>
+                <button
+                  className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-200 transition hover:border-white/25 hover:bg-white/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:text-slate-500"
+                  disabled={!playbackControls.canNext}
+                  type="button"
+                  onClick={onNextStep}
+                >
+                  {messages.visualizer.nextLabel}
+                </button>
+              </div>
             ) : null}
             <button
               className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/25 hover:bg-white/5"
               type="button"
               onClick={onClose}
             >
-              Close
+              {messages.common.close}
             </button>
           </div>
         </div>
@@ -853,10 +958,10 @@ export function ValidationVisualizerModal({
         <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.35fr)_minmax(0,0.9fr)]">
           <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
-              Validated Output
+              {messages.visualizer.validatedOutputEyebrow}
             </p>
             <h3 className="mt-3 text-xl font-semibold text-white">
-              Current field result
+              {messages.visualizer.currentFieldResultTitle}
             </h3>
 
             {currentStep ? (
@@ -869,7 +974,10 @@ export function ValidationVisualizerModal({
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-base font-semibold text-white">
-                    Row {currentStep.rowIndex + 1} - {currentStep.fieldName}
+                    {messages.visualizer.rowFieldTitle(
+                      currentStep.rowIndex,
+                      currentStep.fieldName,
+                    )}
                   </p>
                   <span
                     className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
@@ -878,7 +986,9 @@ export function ValidationVisualizerModal({
                         : 'bg-amber-500/15 text-amber-200'
                     }`}
                   >
-                    {currentStep.passed ? 'accepted' : 'error'}
+                    {currentStep.passed
+                      ? messages.visualizer.accepted
+                      : messages.visualizer.error}
                   </span>
                 </div>
 
@@ -889,7 +999,7 @@ export function ValidationVisualizerModal({
                 <div className="mt-4 grid min-w-0 gap-3">
                   <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      Raw value
+                      {messages.visualizer.rawValue}
                     </p>
                     <pre className={valuePreClassName}>
                       {formatValue(currentStep.rawValue)}
@@ -898,7 +1008,7 @@ export function ValidationVisualizerModal({
 
                   <div className="min-w-0 rounded-2xl bg-slate-950/70 p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                      Pydantic output
+                      {messages.visualizer.pydanticOutput}
                     </p>
                     <pre className={valuePreClassName}>
                       {currentStep.passed
@@ -910,17 +1020,17 @@ export function ValidationVisualizerModal({
               </div>
             ) : (
               <div className="mt-5 rounded-3xl border border-white/10 bg-white/5 p-5 text-sm leading-7 text-slate-400">
-                Pick a playback speed to step through each field.
+                {messages.visualizer.pickPlaybackSpeed}
               </div>
             )}
           </section>
 
           <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-5">
             <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
-              Pydantic Class
+              {messages.visualizer.pydanticClassEyebrow}
             </p>
             <h3 className="mt-3 text-xl font-semibold text-white">
-              Highlighted model lines
+              {messages.visualizer.highlightedModelLinesTitle}
             </h3>
 
             <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/85">
@@ -931,7 +1041,7 @@ export function ValidationVisualizerModal({
                       key={item.key}
                       className="border-y border-white/6 bg-slate-900/75 px-4 py-2 text-center text-xs uppercase tracking-[0.24em] text-slate-500"
                     >
-                      Related code continues below
+                      {messages.visualizer.relatedCodeContinuesBelow}
                     </div>
                   );
                 }
@@ -962,100 +1072,75 @@ export function ValidationVisualizerModal({
           </section>
 
           <section className="min-w-0 rounded-[28px] border border-white/10 bg-white/5 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
-                  Raw Input
-                </p>
-                <h3 className="mt-3 text-xl font-semibold text-white">
-                  Current CSV row
-                </h3>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                {focusedRowIndex >= 0 ? (
-                  <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-                    Row {focusedRowIndex + 1} in focus
-                  </span>
-                ) : null}
-                <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
-                  Showing {csvColumns.length} / {totalColumns} columns
-                </span>
-              </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300">
+                {messages.visualizer.rawInputEyebrow}
+              </p>
+              <h3 className="mt-3 text-xl font-semibold text-white">
+                {messages.visualizer.currentCsvRowsTitle}
+              </h3>
             </div>
 
-            {focusedRawRow ? (
-              <div className="mt-5 rounded-3xl border border-white/10 bg-slate-950/70 p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-base font-semibold text-white">
-                    Row {focusedRowIndex + 1} in focus
-                  </p>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
-                      focusedRowResult
+            {focusedRow ? (
+              <div className="mt-5">
+                <article className="rounded-3xl border border-white/10 bg-slate-950/70 p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-base font-semibold text-white">
+                      {messages.visualizer.rowInFocus(focusedRow.rowIndex)}
+                    </p>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs uppercase tracking-[0.22em] ${
+                        focusedRowResult
+                          ? focusedRowResult.passed
+                            ? 'bg-emerald-500/15 text-emerald-100'
+                            : 'bg-amber-500/15 text-amber-100'
+                          : 'bg-cyan-500/15 text-cyan-100'
+                      }`}
+                    >
+                      {focusedRowResult
                         ? focusedRowResult.passed
-                          ? 'bg-emerald-500/15 text-emerald-100'
-                          : 'bg-amber-500/15 text-amber-100'
-                        : 'bg-white/10 text-slate-300'
-                    }`}
-                  >
-                    {focusedRowResult
-                      ? focusedRowResult.passed
-                        ? 'row complete'
-                        : 'row invalid'
-                      : 'row in progress'}
-                  </span>
-                </div>
+                          ? messages.visualizer.rowStatusComplete
+                          : messages.visualizer.rowStatusInvalid
+                        : messages.visualizer.rowStatusInProgress}
+                    </span>
+                  </div>
 
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
-                  {csvColumns.map((column) => {
-                    const stepKey = `${focusedRowIndex}:${column}`;
-                    const completedStep = completedStepMap.get(stepKey);
-                    const isActive =
-                      currentStep?.rowIndex === focusedRowIndex &&
-                      currentStep.fieldName === column;
-                    const rawColumnValue = focusedRawRow[column] ?? null;
-                    const shouldSpanFullWidth =
-                      shouldRenderCurrentRowCardFullWidth(column, rawColumnValue);
+                  <div className="mt-4 space-y-2">
+                    {csvColumns.map((column) => {
+                      const isActive =
+                        currentStep?.rowIndex === focusedRow.rowIndex &&
+                        currentStep.fieldName === column;
+                      const rawColumnValue = focusedRow.row[column] ?? null;
 
-                    return (
-                      <article
-                        key={`${focusedRowIndex}-${column}`}
-                        className={`min-w-0 rounded-2xl border p-4 transition ${
-                          shouldSpanFullWidth ? 'sm:col-span-2 2xl:col-span-3 ' : ''
-                        }${
-                          isActive
-                            ? 'border-cyan-300/40 bg-cyan-500/12'
-                            : completedStep
-                              ? completedStep.passed
-                                ? 'border-emerald-400/25 bg-emerald-500/8'
-                                : 'border-amber-400/25 bg-amber-500/10'
-                              : 'border-white/10 bg-slate-950/75'
-                        }`}
-                      >
-                        <p
-                          className={
-                            shouldSpanFullWidth
-                              ? 'text-xs uppercase tracking-[0.2em] text-slate-400 break-all'
-                              : 'overflow-hidden text-ellipsis whitespace-nowrap text-xs uppercase tracking-[0.2em] text-slate-400'
-                          }
-                          title={column}
+                      return (
+                        <div
+                          key={`${focusedRow.rowIndex}-${column}`}
+                          data-active-column={isActive ? 'true' : 'false'}
+                          data-column-name={column}
+                          className={`grid gap-2 rounded-2xl border px-4 py-3 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)] ${
+                            isActive
+                              ? 'border-cyan-300/35 bg-cyan-500/12 text-cyan-50 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.22)]'
+                              : 'border-white/10 bg-slate-950/75 text-slate-100'
+                          }`}
                         >
-                          {column}
-                        </p>
-                        <p
-                          className={currentRowValueTextClassName}
-                          title={String(rawColumnValue ?? '')}
-                        >
-                          {formatCurrentRowValue(rawColumnValue)}
-                        </p>
-                      </article>
-                    );
-                  })}
-                </div>
+                          <p className="text-sm font-semibold text-slate-300 break-all">
+                            {column}
+                          </p>
+                          <p
+                            className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm"
+                            title={String(rawColumnValue ?? '')}
+                          >
+                            {formatCurrentRowValue(rawColumnValue)}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
               </div>
             ) : (
               <div className="mt-5 rounded-3xl border border-dashed border-white/10 bg-slate-950/45 p-5 text-sm leading-7 text-slate-400">
-                The active CSV row will appear here when the walkthrough starts.
+                {messages.visualizer.activeCsvRowsPlaceholder}
               </div>
             )}
 
@@ -1078,14 +1163,15 @@ export function ValidationVisualizerModal({
             visibleColumns: resultColumns,
             totalRows: state.rawRows.length,
             maxDisplayedRows: state.request.maxVisualizedRows,
-            emptyMessage:
-              'The row-level results will append here as soon as each CSV row finishes validation.',
+            emptyMessage: messages.visualizer.walkthroughResultEmpty,
+            messages,
           })}
 
         {shouldShowExerciseResult &&
           renderExerciseResultSection({
             detail: state.detail,
             result: state.runResult,
+            messages,
           })}
       </div>
     </div>

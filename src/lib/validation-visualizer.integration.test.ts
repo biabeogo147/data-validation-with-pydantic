@@ -112,7 +112,7 @@ describe('visualization runtime parity', () => {
         modelClassName: 'PricingRow',
         modelPlaceholderId: 'MODEL_SCHEMA',
         fieldOrder: ['rating_count'],
-        visibleColumns: ['rating_count'],
+        maxVisibleColumns: 1,
         maxVisualizedRows: 1,
       },
     };

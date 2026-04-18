@@ -270,14 +270,7 @@ export const fullAmazonSchemaExercise: ExerciseDefinition = {
       'img_link',
       'product_link',
     ],
-    visibleColumns: [
-      'product_id',
-      'product_name',
-      'category',
-      'discounted_price',
-      'rating',
-      'rating_count',
-    ],
-    maxVisualizedRows: 4,
+    maxVisibleColumns: 4,
+    maxVisualizedRows: 3,
   },
 };

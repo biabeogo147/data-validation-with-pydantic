@@ -1,7 +1,10 @@
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ExerciseDetails } from './ExerciseDetails';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import { appMessages, type AppLocale } from '../../i18n/messages';
 import type { ExerciseDefinition } from '../../types/exercise';
 
 const exercise: ExerciseDefinition = {
@@ -31,15 +34,32 @@ const exercise: ExerciseDefinition = {
   },
 };
 
+function renderDetailsWithLocale(locale: AppLocale) {
+  return renderToStaticMarkup(
+    createElement(
+      I18nProvider,
+      { initialLocale: locale },
+      createElement(ExerciseDetails, { exercise }),
+    ),
+  );
+}
+
 describe('ExerciseDetails', () => {
   it('renders the example output and always-visible CSV preview section', () => {
-    const markup = renderToStaticMarkup(ExerciseDetails({ exercise }));
+    const markup = renderDetailsWithLocale('en');
 
-    expect(markup).toContain('Example output');
+    expect(markup).toContain(appMessages.en.exerciseDetails.exampleOutput);
     expect(markup).toContain('valid_count');
     expect(markup).toContain('Broken');
-    expect(markup).toContain('CSV Preview');
+    expect(markup).toContain(appMessages.en.csvPreview.title);
     expect(markup).not.toContain('View CSV');
     expect(markup).not.toContain('Hide CSV');
+  });
+
+  it('switches app shell labels when a different locale is active', () => {
+    const markup = renderDetailsWithLocale('vi');
+
+    expect(markup).toContain(appMessages.vi.csvPreview.title);
+    expect(markup).toContain(appMessages.vi.exerciseDetails.exampleOutput);
   });
 });

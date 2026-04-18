@@ -45,7 +45,7 @@ const exercise: ExerciseDefinition = {
     modelPlaceholderId: 'MODEL_A',
     csvFileId: 'people',
     fieldOrder: ['name', 'age'],
-    visibleColumns: ['name'],
+    maxVisibleColumns: 1,
     maxVisualizedRows: 1,
   },
 };
@@ -148,7 +148,8 @@ describe('buildVisualizationRequest', () => {
     expect(request.modelClassName).toBe('A');
     expect(request.csvMountPath).toBe('/data/people.csv');
     expect(request.fieldSequence).toEqual(['name', 'age']);
-    expect(request.visibleColumns).toEqual(['name']);
+    expect(request.maxVisibleColumns).toBe(1);
+    expect(request).not.toHaveProperty('visibleColumns');
     expect(request.maxVisualizedRows).toBe(1);
     expect(request.highlights.age).toEqual({
       fieldName: 'age',
@@ -170,13 +171,13 @@ describe('buildVisualizationRequest', () => {
     );
   });
 
-  it('falls back to the validated field sequence when visibleColumns is omitted', () => {
+  it('shows every validated field when maxVisibleColumns is omitted', () => {
     const request = buildVisualizationRequest(
       {
         ...exercise,
         visualizationConfig: {
           ...exercise.visualizationConfig!,
-          visibleColumns: undefined,
+          maxVisibleColumns: undefined,
         },
       },
       {
@@ -185,7 +186,7 @@ describe('buildVisualizationRequest', () => {
     );
 
     expect(request.fieldSequence).toEqual(['name', 'age']);
-    expect(request.visibleColumns).toEqual(['name', 'age']);
+    expect(request.maxVisibleColumns).toBeNull();
   });
 
   it('falls back to the first CSV file when csvFileId is omitted', () => {

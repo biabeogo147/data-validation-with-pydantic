@@ -197,7 +197,7 @@ export const fieldValidatorExercise: ExerciseDefinition = {
       'discount_percentage',
       'rating_count',
     ],
-    visibleColumns: ['product_id', 'category', 'discounted_price', 'rating_count'],
-    maxVisualizedRows: 4,
+    maxVisibleColumns: 4,
+    maxVisualizedRows: 3,
   },
 };

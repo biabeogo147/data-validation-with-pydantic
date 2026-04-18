@@ -10,6 +10,13 @@ import {
   type VisualizationRowResult,
   type VisualizationStep,
 } from '../lib/validation-visualizer';
+import {
+  getInitialPlaybackStepIndex,
+  getNextPlaybackStepIndex,
+  getPlaybackAdvance,
+  getPlaybackStepDetail,
+  getPreviousPlaybackStepIndex,
+} from '../lib/visualizer-playback';
 import type {
   ExerciseDefinition,
   ExercisePlaceholderValues,
@@ -25,6 +32,7 @@ export interface ValidationVisualizerState {
   mode: ValidationVisualizerMode;
   exerciseId: string | null;
   speed: VisualizationPlaybackSpeed | null;
+  isPlaybackPaused: boolean;
   request: VisualizationRequest | null;
   rawRows: Record<string, string>[];
   steps: VisualizationStep[];
@@ -41,6 +49,7 @@ const INITIAL_STATE: ValidationVisualizerState = {
   mode: 'choice',
   exerciseId: null,
   speed: null,
+  isPlaybackPaused: false,
   request: null,
   rawRows: [],
   steps: [],
@@ -57,11 +66,7 @@ const PLAYBACK_DELAY_MS: Record<VisualizationPlaybackSpeed, number> = {
   '4x': 250,
 };
 
-function sleep(durationMs: number) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, durationMs);
-  });
-}
+const DEFAULT_PLAYBACK_SPEED: VisualizationPlaybackSpeed = '1x';
 
 function uniquePackages(packages: string[]) {
   return Array.from(new Set(packages.filter(Boolean)));
@@ -110,14 +115,43 @@ export function useValidationVisualizer(options: {
   ) => Promise<ExerciseRunResult>;
 }) {
   const [state, setState] = useState<ValidationVisualizerState>(INITIAL_STATE);
+  const stateRef = useRef<ValidationVisualizerState>(INITIAL_STATE);
   const activeTokenRef = useRef(0);
+  const playbackTimerRef = useRef<number | null>(null);
   const pendingExerciseRef = useRef<ExerciseDefinition | null>(null);
   const pendingValuesRef = useRef<ExercisePlaceholderValues | null>(null);
 
+  const setVisualizerState: Dispatch<SetStateAction<ValidationVisualizerState>> = (
+    update,
+  ) => {
+    const nextState =
+      typeof update === 'function'
+        ? (
+            update as (
+              currentState: ValidationVisualizerState,
+            ) => ValidationVisualizerState
+          )(stateRef.current)
+        : update;
+
+    stateRef.current = nextState;
+    setState(nextState);
+  };
+
+  function clearPlaybackTimer() {
+    if (typeof window === 'undefined' || playbackTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(playbackTimerRef.current);
+    playbackTimerRef.current = null;
+  }
+
   function close() {
+    clearPlaybackTimer();
     activeTokenRef.current += 1;
     pendingExerciseRef.current = null;
     pendingValuesRef.current = null;
+    stateRef.current = INITIAL_STATE;
     setState(INITIAL_STATE);
   }
 
@@ -129,9 +163,10 @@ export function useValidationVisualizer(options: {
       return;
     }
 
-    setState((currentState) => ({
+    setVisualizerState((currentState) => ({
       ...currentState,
       status: 'loading',
+      isPlaybackPaused: false,
       detail: 'Running the full exercise checks after the walkthrough...',
     }));
 
@@ -141,12 +176,94 @@ export function useValidationVisualizer(options: {
       return;
     }
 
-    setState((currentState) => ({
+    setVisualizerState((currentState) => ({
       ...currentState,
       status: 'complete',
+      isPlaybackPaused: false,
       runResult: result,
       detail: 'Visualization complete. Final exercise result is ready.',
     }));
+  }
+
+  async function completeWalkthrough(token: number) {
+    if (activeTokenRef.current !== token) {
+      return;
+    }
+
+    clearPlaybackTimer();
+
+    setVisualizerState((currentState) => ({
+      ...currentState,
+      status: 'loading',
+      isPlaybackPaused: false,
+      currentStepIndex:
+        currentState.steps.length > 0 ? currentState.steps.length - 1 : -1,
+      detail: 'Field walkthrough complete. Running final exercise checks...',
+    }));
+
+    await finalizeRun(token);
+  }
+
+  function schedulePlaybackTick(
+    token: number,
+    scheduledState: ValidationVisualizerState = stateRef.current,
+  ) {
+    clearPlaybackTimer();
+
+    if (typeof window === 'undefined' || activeTokenRef.current !== token) {
+      return;
+    }
+
+    const currentState = scheduledState;
+
+    if (
+      currentState.status !== 'playing' ||
+      currentState.mode !== 'walkthrough' ||
+      currentState.isPlaybackPaused ||
+      !currentState.speed
+    ) {
+      return;
+    }
+
+    playbackTimerRef.current = window.setTimeout(() => {
+      playbackTimerRef.current = null;
+
+      if (activeTokenRef.current !== token) {
+        return;
+      }
+
+      const latestState = stateRef.current;
+
+      if (
+        latestState.status !== 'playing' ||
+        latestState.mode !== 'walkthrough' ||
+        latestState.isPlaybackPaused
+      ) {
+        return;
+      }
+
+      const playbackAdvance = getPlaybackAdvance(
+        latestState.currentStepIndex,
+        latestState.steps.length,
+      );
+
+      if (playbackAdvance.kind === 'idle' || playbackAdvance.kind === 'finalize') {
+        void completeWalkthrough(token);
+        return;
+      }
+
+      setVisualizerState((currentPlaybackState) => ({
+        ...currentPlaybackState,
+        status: 'playing',
+        currentStepIndex: playbackAdvance.stepIndex,
+        detail: getPlaybackStepDetail(
+          playbackAdvance.stepIndex,
+          currentPlaybackState.steps.length,
+        ),
+      }));
+
+      schedulePlaybackTick(token);
+    }, PLAYBACK_DELAY_MS[currentState.speed]);
   }
 
   async function runDirect(
@@ -155,13 +272,15 @@ export function useValidationVisualizer(options: {
     values: ExercisePlaceholderValues,
   ) {
     let request: VisualizationRequest | null = null;
+    clearPlaybackTimer();
 
-    setState({
+    setVisualizerState({
       isOpen: true,
       status: 'loading',
       mode: 'direct',
       exerciseId: exercise.id,
       speed: null,
+      isPlaybackPaused: false,
       request,
       rawRows: [],
       steps: [],
@@ -178,7 +297,7 @@ export function useValidationVisualizer(options: {
         : null;
 
       if (request) {
-        setState((currentState) => ({
+        setVisualizerState((currentState) => ({
           ...currentState,
           request,
         }));
@@ -188,12 +307,12 @@ export function useValidationVisualizer(options: {
           exercise,
           token,
           activeTokenRef,
-          setState,
+          setVisualizerState,
           'Preparing the full CSV results without the walkthrough...',
         );
 
         if (parsed && activeTokenRef.current === token) {
-          setState((currentState) => ({
+          setVisualizerState((currentState) => ({
             ...currentState,
             request,
             rawRows: parsed.rawRows,
@@ -208,7 +327,7 @@ export function useValidationVisualizer(options: {
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      setState((currentState) => ({
+      setVisualizerState((currentState) => ({
         ...currentState,
         error: message,
         detail: 'Could not prepare the whole-file CSV preview. Running final checks anyway...',
@@ -221,9 +340,10 @@ export function useValidationVisualizer(options: {
       return;
     }
 
-    setState((currentState) => ({
+    setVisualizerState((currentState) => ({
       ...currentState,
       status: 'complete',
+      isPlaybackPaused: false,
       runResult: result,
       detail: 'Direct run complete. Final CSV result is ready.',
     }));
@@ -243,21 +363,28 @@ export function useValidationVisualizer(options: {
       return;
     }
 
-    setState({
+    clearPlaybackTimer();
+
+    setVisualizerState({
       isOpen: true,
       status: 'choice',
       mode: 'choice',
       exerciseId: exercise.id,
       speed: null,
+      isPlaybackPaused: false,
       request: null,
       rawRows: [],
       steps: [],
       rowResults: [],
       runResult: null,
       currentStepIndex: -1,
-      detail: 'Choose a playback speed or skip the visual walkthrough.',
+      detail: 'Choose whether to visualize the walkthrough or skip it.',
       error: null,
     });
+  }
+
+  async function visualize() {
+    await startPlayback(DEFAULT_PLAYBACK_SPEED);
   }
 
   async function skip() {
@@ -281,25 +408,28 @@ export function useValidationVisualizer(options: {
 
     const token = activeTokenRef.current;
     let request: VisualizationRequest;
+    clearPlaybackTimer();
 
     try {
       request = buildVisualizationRequest(exercise, values);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      setState((currentState) => ({
+      setVisualizerState((currentState) => ({
         ...currentState,
         status: 'error',
+        isPlaybackPaused: false,
         error: message,
         detail: 'The visualizer could not be prepared for this exercise.',
       }));
       return;
     }
 
-    setState((currentState) => ({
+    setVisualizerState((currentState) => ({
       ...currentState,
       status: 'loading',
       mode: 'walkthrough',
       speed,
+      isPlaybackPaused: false,
       request,
       rawRows: [],
       steps: [],
@@ -316,7 +446,7 @@ export function useValidationVisualizer(options: {
         exercise,
         token,
         activeTokenRef,
-        setState,
+        setVisualizerState,
         'Preparing the Python runtime for the walkthrough...',
       );
 
@@ -324,62 +454,167 @@ export function useValidationVisualizer(options: {
         return;
       }
 
-      setState((currentState) => ({
-        ...currentState,
-        status: 'playing',
+      const initialStepIndex = getInitialPlaybackStepIndex(parsed.steps.length);
+
+      const playbackState: ValidationVisualizerState = {
+        ...stateRef.current,
+        isOpen: true,
+        status: parsed.steps.length > 0 ? 'playing' : 'loading',
         mode: 'walkthrough',
+        exerciseId: exercise.id,
+        speed,
+        isPlaybackPaused: false,
         request,
         rawRows: parsed.rawRows,
         steps: parsed.steps,
         rowResults: parsed.rowResults,
         runResult: null,
-        currentStepIndex: -1,
+        currentStepIndex: initialStepIndex,
         detail:
           parsed.steps.length > 0
-            ? 'Animating each row and field through the Pydantic model...'
-            : 'No visualization steps were returned.',
-      }));
+            ? getPlaybackStepDetail(initialStepIndex, parsed.steps.length)
+            : 'No visualization steps were returned. Running final exercise checks...',
+        error: null,
+      };
 
-      for (let index = 0; index < parsed.steps.length; index += 1) {
-        if (activeTokenRef.current !== token) {
-          return;
-        }
+      setVisualizerState(playbackState);
 
-        setState((currentState) => ({
-          ...currentState,
-          status: 'playing',
-          currentStepIndex: index,
-          detail: `Validating step ${index + 1} of ${parsed.steps.length} across the CSV file...`,
-        }));
-
-        await sleep(PLAYBACK_DELAY_MS[speed]);
+      if (parsed.steps.length > 0) {
+        schedulePlaybackTick(token, playbackState);
+      } else {
+        await finalizeRun(token);
       }
-
-      if (activeTokenRef.current !== token) {
-        return;
-      }
-
-      setState((currentState) => ({
-        ...currentState,
-        status: 'loading',
-        currentStepIndex:
-          parsed.steps.length > 0 ? parsed.steps.length - 1 : -1,
-        detail: 'Field walkthrough complete. Running final exercise checks...',
-      }));
-
-      await finalizeRun(token);
     } catch (error) {
       if (activeTokenRef.current !== token) {
         return;
       }
 
       const message = error instanceof Error ? error.message : String(error);
-      setState((currentState) => ({
+      setVisualizerState((currentState) => ({
         ...currentState,
         status: 'error',
+        isPlaybackPaused: false,
         error: message,
         detail: 'The visualization failed before the run could finish.',
       }));
+    }
+  }
+
+  function togglePausePlayback() {
+    const currentState = stateRef.current;
+
+    if (
+      currentState.status !== 'playing' ||
+      currentState.mode !== 'walkthrough' ||
+      currentState.steps.length === 0
+    ) {
+      return;
+    }
+
+    if (currentState.isPlaybackPaused) {
+      const resumedState: ValidationVisualizerState = {
+        ...currentState,
+        isPlaybackPaused: false,
+        detail: getPlaybackStepDetail(
+          currentState.currentStepIndex,
+          currentState.steps.length,
+        ),
+      };
+
+      setVisualizerState(resumedState);
+      schedulePlaybackTick(activeTokenRef.current, resumedState);
+      return;
+    }
+
+    clearPlaybackTimer();
+    setVisualizerState((playbackState) => ({
+      ...playbackState,
+      isPlaybackPaused: true,
+      detail: 'Walkthrough paused. Use Previous or Next to inspect each step.',
+    }));
+  }
+
+  function previousStep() {
+    const currentState = stateRef.current;
+
+    if (
+      currentState.status !== 'playing' ||
+      currentState.mode !== 'walkthrough' ||
+      currentState.steps.length === 0
+    ) {
+      return;
+    }
+
+    clearPlaybackTimer();
+    setVisualizerState((playbackState) => {
+      const previousStepIndex = getPreviousPlaybackStepIndex(
+        playbackState.currentStepIndex,
+        playbackState.steps.length,
+      );
+
+      return {
+        ...playbackState,
+        isPlaybackPaused: true,
+        currentStepIndex: previousStepIndex,
+        detail: getPlaybackStepDetail(
+          previousStepIndex,
+          playbackState.steps.length,
+        ),
+      };
+    });
+  }
+
+  function nextStep() {
+    const currentState = stateRef.current;
+
+    if (
+      currentState.status !== 'playing' ||
+      currentState.mode !== 'walkthrough' ||
+      currentState.steps.length === 0
+    ) {
+      return;
+    }
+
+    clearPlaybackTimer();
+    setVisualizerState((playbackState) => {
+      const nextStepIndex = getNextPlaybackStepIndex(
+        playbackState.currentStepIndex,
+        playbackState.steps.length,
+      );
+
+      return {
+        ...playbackState,
+        isPlaybackPaused: true,
+        currentStepIndex: nextStepIndex,
+        detail: getPlaybackStepDetail(
+          nextStepIndex,
+          playbackState.steps.length,
+        ),
+      };
+    });
+  }
+
+  function setPlaybackSpeed(speed: VisualizationPlaybackSpeed) {
+    const currentState = stateRef.current;
+
+    if (
+      currentState.mode !== 'walkthrough' ||
+      currentState.status !== 'playing' ||
+      currentState.steps.length === 0 ||
+      currentState.speed === speed
+    ) {
+      return;
+    }
+
+    const updatedState: ValidationVisualizerState = {
+      ...currentState,
+      speed,
+    };
+
+    setVisualizerState(updatedState);
+
+    if (!updatedState.isPlaybackPaused) {
+      schedulePlaybackTick(activeTokenRef.current, updatedState);
     }
   }
 
@@ -387,7 +622,12 @@ export function useValidationVisualizer(options: {
     state,
     close,
     open,
+    visualize,
     skip,
     startPlayback,
+    setPlaybackSpeed,
+    togglePausePlayback,
+    previousStep,
+    nextStep,
   };
 }

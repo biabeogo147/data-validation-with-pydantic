@@ -143,6 +143,6 @@ export const baseModelExercise: ExerciseDefinition = {
     modelClassName: 'ProductReview',
     modelPlaceholderId: 'MODEL_SCHEMA',
     fieldOrder: ['product_id', 'product_name', 'rating'],
-    maxVisualizedRows: 4,
+    maxVisualizedRows: 3,
   },
 };

@@ -1,8 +1,12 @@
+import { useI18n } from '../../i18n/I18nProvider';
+
 interface EditorImportsHintProps {
   importLines?: string[];
 }
 
 export function EditorImportsHint({ importLines }: EditorImportsHintProps) {
+  const { messages } = useI18n();
+
   if (!importLines?.length) {
     return null;
   }
@@ -12,7 +16,7 @@ export function EditorImportsHint({ importLines }: EditorImportsHintProps) {
   return (
     <div className="mt-3 rounded-2xl border border-cyan-400/15 bg-cyan-500/8 p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-200">
-        Available imports
+        {messages.editor.availableImports}
       </p>
 
       {hasSingleImportLine ? (

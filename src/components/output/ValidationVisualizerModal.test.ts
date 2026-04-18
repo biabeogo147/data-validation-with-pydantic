@@ -1,8 +1,10 @@
+import { createElement, type ComponentProps } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ValidationVisualizerModal } from './ValidationVisualizerModal';
 import type { ValidationVisualizerState } from '../../hooks/useValidationVisualizer';
+import { I18nProvider } from '../../i18n/I18nProvider';
 
 type RequestHighlightMap = NonNullable<
   ValidationVisualizerState['request']
@@ -14,12 +16,13 @@ const baseState: ValidationVisualizerState = {
   mode: 'walkthrough',
   exerciseId: 'csv-import',
   speed: '1x',
+  isPlaybackPaused: false,
   request: {
     modelClassName: 'UserRecord',
     modelCode: ['class UserRecord(BaseModel):', '    age: int'].join('\n'),
     csvMountPath: '/data/users.csv',
     fieldSequence: ['age'],
-    visibleColumns: ['age'],
+    maxVisibleColumns: 1,
     maxVisualizedRows: 1,
     highlights: {
       age: {
@@ -61,16 +64,38 @@ const baseState: ValidationVisualizerState = {
   error: null,
 };
 
+function renderEnglishModal(
+  props: Partial<ComponentProps<typeof ValidationVisualizerModal>> & {
+    state: ValidationVisualizerState;
+  },
+) {
+  const resolvedProps: ComponentProps<typeof ValidationVisualizerModal> = {
+    onClose: () => {},
+    onSkip: () => {},
+    onVisualize: () => {},
+    onPauseToggle: () => {},
+    onPreviousStep: () => {},
+    onNextStep: () => {},
+    onStartPlayback: () => {},
+    ...props,
+  };
+
+  return renderToStaticMarkup(
+    createElement(
+      I18nProvider,
+      {
+        initialLocale: 'en',
+      },
+      createElement(ValidationVisualizerModal, resolvedProps),
+    ),
+  );
+}
+
 describe('ValidationVisualizerModal', () => {
   it('uses a wider desktop layout for the walkthrough columns', () => {
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: baseState,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: baseState,
+    });
 
     expect(markup).toContain('w-full max-w-[1800px]');
     expect(markup).toContain(
@@ -79,27 +104,22 @@ describe('ValidationVisualizerModal', () => {
   });
 
   it('wraps long validation result text inside the result card', () => {
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: baseState,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: baseState,
+    });
 
     expect(markup).toContain(
       'max-h-64 min-w-0 overflow-auto whitespace-pre-wrap break-all text-sm leading-6 text-slate-100',
     );
   });
 
-  it('shows every validated current-row column even when row-result rendering stays limited to configured columns', () => {
+  it('uses the validated field sequence as the single source of truth for walkthrough and whole-file columns', () => {
     const stateWithExtraColumns: ValidationVisualizerState = {
       ...baseState,
       request: {
         ...baseState.request!,
         fieldSequence: ['age', 'hidden'],
-        visibleColumns: ['age'],
+        maxVisibleColumns: null,
       },
       rawRows: [
         {
@@ -130,28 +150,23 @@ describe('ValidationVisualizerModal', () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithExtraColumns,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithExtraColumns,
+    });
 
-    expect(markup).toContain('Showing 2 / 2 columns');
+    expect(markup).not.toContain('Showing 2 / 2 columns');
     expect(markup).toContain('>age<');
     expect(markup).toContain('>hidden<');
     expect(markup).toContain('current-row-only');
-    expect(markup).not.toContain('whole-file-hidden');
+    expect(markup).toContain('whole-file-hidden');
   });
 
-  it('defaults the walkthrough raw-input panel to the first focused row before playback advances', () => {
+  it('defaults the walkthrough raw-input panel to only the first active row before playback advances', () => {
     const stateWithManyRows: ValidationVisualizerState = {
       ...baseState,
       request: {
         ...baseState.request!,
-        maxVisualizedRows: 2,
+        maxVisualizedRows: 3,
       },
       rawRows: [
         {
@@ -169,29 +184,23 @@ describe('ValidationVisualizerModal', () => {
       currentStepIndex: -1,
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithManyRows,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithManyRows,
+    });
 
     expect(markup).toContain('visible-row-1');
-    expect(markup).toContain('Row 1 in focus');
     expect(markup).not.toContain('visible-row-2');
     expect(markup).not.toContain('hidden-row-3');
   });
 
-  it('shows only the active row in the walkthrough raw-input panel and lets columns wrap as cards', () => {
-    const stateWithMultipleVisibleColumns: ValidationVisualizerState = {
+  it('shows only the currently active row during playback even when more rows are animated', () => {
+    const stateWithFocusedRow: ValidationVisualizerState = {
       ...baseState,
       request: {
         ...baseState.request!,
-        fieldSequence: ['product_id', 'category', 'discounted_price', 'rating_count'],
-        visibleColumns: ['product_id', 'category', 'discounted_price', 'rating_count'],
-        maxVisualizedRows: 2,
+        fieldSequence: ['product_id', 'category'],
+        maxVisibleColumns: null,
+        maxVisualizedRows: 4,
         highlights: ({
           category: {
             fieldName: 'category',
@@ -204,14 +213,14 @@ describe('ValidationVisualizerModal', () => {
         {
           product_id: 'ROW-1',
           category: 'Category row 1',
-          discounted_price: '199',
-          rating_count: '100',
         },
         {
           product_id: 'ROW-2',
           category: 'Category row 2',
-          discounted_price: '299',
-          rating_count: '200',
+        },
+        {
+          product_id: 'ROW-3',
+          category: 'Category row 3',
         },
       ],
       steps: [
@@ -228,35 +237,29 @@ describe('ValidationVisualizerModal', () => {
       currentStepIndex: 0,
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithMultipleVisibleColumns,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithFocusedRow,
+    });
 
-    expect(markup).toContain('Row 2 in focus');
     expect(markup).toContain('ROW-2');
     expect(markup).toContain('Category row 2');
-    expect(markup).toContain('299');
-    expect(markup).toContain('200');
     expect(markup).not.toContain('ROW-1');
     expect(markup).not.toContain('Category row 1');
+    expect(markup).not.toContain('ROW-3');
+    expect(markup).not.toContain('Category row 3');
   });
 
-  it('renders long current-row values as full-width cards and clips their preview text', () => {
-    const longCategoryValue = `${'CATEGORY-'.repeat(20)}THE-END`;
-    const stateWithLongCurrentRowValues: ValidationVisualizerState = {
+  it('slides the visible raw-input columns with the active field and hides columns outside maxVisibleColumns', () => {
+    const stateWithSlidingColumns: ValidationVisualizerState = {
       ...baseState,
       request: {
         ...baseState.request!,
-        fieldSequence: ['product_id', 'category', 'discounted_price'],
-        visibleColumns: ['product_id', 'category', 'discounted_price'],
+        fieldSequence: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'],
+        maxVisibleColumns: 4,
+        maxVisualizedRows: 3,
         highlights: ({
-          category: {
-            fieldName: 'category',
+          c5: {
+            fieldName: 'c5',
             startLine: 2,
             endLine: 2,
           },
@@ -264,48 +267,52 @@ describe('ValidationVisualizerModal', () => {
       },
       rawRows: [
         {
-          product_id: 'ROW-1',
-          category: longCategoryValue,
-          discounted_price: '299',
+          c1: 'VALUE-C1',
+          c2: 'VALUE-C2',
+          c3: 'VALUE-C3',
+          c4: 'VALUE-C4',
+          c5: 'VALUE-C5',
+          c6: 'VALUE-C6',
         },
       ],
       steps: [
         {
           rowIndex: 0,
-          fieldName: 'category',
+          fieldName: 'c5',
           passed: true,
-          rawValue: longCategoryValue,
-          validatedValue: ['Phones', 'Chargers'],
-          message: 'Accepted as list',
+          rawValue: 'VALUE-C5',
+          validatedValue: 'VALUE-C5',
+          message: 'Accepted as str',
         },
       ],
+      rowResults: [],
       currentStepIndex: 0,
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithLongCurrentRowValues,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithSlidingColumns,
+    });
 
-    expect(markup).toContain('sm:col-span-2 2xl:col-span-3');
-    expect(markup).toContain('CATEGORY-CATEGORY-CATEGORY');
-    expect(markup).not.toContain('CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-CATEGORY-THE-END&quot;</p>');
+    expect(markup).not.toContain('Showing 4 / 6 columns');
+    expect(markup).not.toContain('Showing 1 / 1 rows');
+    expect(markup).not.toContain('VALUE-C1');
+    expect(markup).toContain('VALUE-C2');
+    expect(markup).toContain('VALUE-C3');
+    expect(markup).toContain('VALUE-C4');
+    expect(markup).toContain('VALUE-C5');
+    expect(markup).not.toContain('VALUE-C6');
   });
 
-  it('keeps short current-row labels and short values on one line without wrapping into neighbors', () => {
-    const stateWithCompactCurrentRowCards: ValidationVisualizerState = {
+  it('renders each raw CSV column as its own row instead of responsive cards', () => {
+    const stateWithRawRows: ValidationVisualizerState = {
       ...baseState,
       request: {
         ...baseState.request!,
-        fieldSequence: ['sku', 'price', 'qty'],
-        visibleColumns: ['sku', 'price', 'qty'],
+        fieldSequence: ['sku', 'discount_percentage'],
+        maxVisibleColumns: 2,
         highlights: ({
-          price: {
-            fieldName: 'price',
+          sku: {
+            fieldName: 'sku',
             startLine: 2,
             endLine: 2,
           },
@@ -314,142 +321,73 @@ describe('ValidationVisualizerModal', () => {
       rawRows: [
         {
           sku: 'XXXXXXXX',
-          price: '12345',
-          qty: '4321',
-        },
-      ],
-      steps: [
-        {
-          rowIndex: 0,
-          fieldName: 'price',
-          passed: true,
-          rawValue: '12345',
-          validatedValue: 12345,
-          message: 'Accepted as int',
-        },
-      ],
-      currentStepIndex: 0,
-    };
-
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithCompactCurrentRowCards,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
-
-    expect(markup).toContain(
-      'block max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-mono text-sm leading-6 text-slate-100',
-    );
-    expect(markup).toContain(
-      'overflow-hidden text-ellipsis whitespace-nowrap text-xs uppercase tracking-[0.2em] text-slate-400',
-    );
-    expect(markup).toContain('&quot;XXXXXXXX&quot;');
-    expect(markup).toContain('>sku<');
-    expect(markup).toContain('>price<');
-    expect(markup).toContain('>qty<');
-  });
-
-  it('renders current-row cards with long column names as full-width even when the value is short', () => {
-    const stateWithLongColumnName: ValidationVisualizerState = {
-      ...baseState,
-      request: {
-        ...baseState.request!,
-        fieldSequence: ['discount_percentage', 'rating'],
-        visibleColumns: ['discount_percentage', 'rating'],
-        highlights: ({
-          discount_percentage: {
-            fieldName: 'discount_percentage',
-            startLine: 2,
-            endLine: 2,
-          },
-        } as unknown) as RequestHighlightMap,
-      },
-      rawRows: [
-        {
           discount_percentage: '64%',
-          rating: '4.2',
         },
       ],
       steps: [
         {
           rowIndex: 0,
-          fieldName: 'discount_percentage',
+          fieldName: 'sku',
           passed: true,
-          rawValue: '64%',
-          validatedValue: 64,
-          message: 'Accepted as int',
-        },
-      ],
-      currentStepIndex: 0,
-    };
-
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithLongColumnName,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
-
-    expect(markup).toContain('discount_percentage');
-    expect(markup).toContain('sm:col-span-2 2xl:col-span-3');
-    expect(markup).toContain(
-      '<p class="text-xs uppercase tracking-[0.2em] text-slate-400 break-all" title="discount_percentage">discount_percentage</p>',
-    );
-  });
-
-  it('promotes medium-length CSV column names like product_id to a full-width card before they truncate', () => {
-    const stateWithMediumColumnName: ValidationVisualizerState = {
-      ...baseState,
-      request: {
-        ...baseState.request!,
-        fieldSequence: ['product_id', 'rating'],
-        visibleColumns: ['product_id', 'rating'],
-        highlights: ({
-          product_id: {
-            fieldName: 'product_id',
-            startLine: 2,
-            endLine: 2,
-          },
-        } as unknown) as RequestHighlightMap,
-      },
-      rawRows: [
-        {
-          product_id: 'B07JW9H4J1',
-          rating: '4.2',
-        },
-      ],
-      steps: [
-        {
-          rowIndex: 0,
-          fieldName: 'product_id',
-          passed: true,
-          rawValue: 'B07JW9H4J1',
-          validatedValue: 'B07JW9H4J1',
+          rawValue: 'XXXXXXXX',
+          validatedValue: 'XXXXXXXX',
           message: 'Accepted as str',
         },
       ],
       currentStepIndex: 0,
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithMediumColumnName,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithRawRows,
+    });
 
-    expect(markup).toContain('title="product_id">product_id</p>');
-    expect(markup).toContain('sm:col-span-2 2xl:col-span-3');
-    expect(markup).not.toContain(
-      'title="product_id">product...</p>',
-    );
+    expect(markup).toContain('discount_percentage');
+    expect(markup).toContain('&quot;XXXXXXXX&quot;');
+    expect(markup).toContain('&quot;64%&quot;');
+    expect(markup).not.toContain('sm:col-span-2 2xl:col-span-3');
+  });
+
+  it('marks only the active raw-input column as highlighted', () => {
+    const markup = renderEnglishModal({
+      state: {
+        ...baseState,
+        request: {
+          ...baseState.request!,
+          fieldSequence: ['age', 'rating_count'],
+          maxVisibleColumns: 2,
+          highlights: ({
+            rating_count: {
+              fieldName: 'rating_count',
+              startLine: 2,
+              endLine: 2,
+            },
+          } as unknown) as RequestHighlightMap,
+        },
+        rawRows: [
+          {
+            age: '19',
+            rating_count: '1,234',
+          },
+        ],
+        steps: [
+          {
+            rowIndex: 0,
+            fieldName: 'rating_count',
+            passed: true,
+            rawValue: '1,234',
+            validatedValue: 1234,
+            message: 'Accepted as int',
+          },
+        ],
+        rowResults: [],
+        currentStepIndex: 0,
+      },
+    });
+
+    expect(markup).toContain('data-active-column="true"');
+    expect(markup).toContain('data-column-name="rating_count"');
+    expect(markup).toContain('data-column-name="age"');
+    expect(markup).toContain('data-active-column="false"');
   });
 
   it('shows only the code lines related to the active field, including its validator block', () => {
@@ -505,14 +443,9 @@ describe('ValidationVisualizerModal', () => {
       currentStepIndex: 0,
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithContextualCode,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithContextualCode,
+    });
 
     expect(markup).toContain('category: list[str]');
     expect(markup).toContain('@field_validator(&quot;category&quot;, mode=&quot;before&quot;)');
@@ -570,14 +503,9 @@ describe('ValidationVisualizerModal', () => {
       currentStepIndex: 0,
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithShortContextualCode,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithShortContextualCode,
+    });
 
     expect(markup).toContain('class ShortAmazonModel(BaseModel):');
     expect(markup).toContain('product_id: str');
@@ -635,16 +563,12 @@ describe('ValidationVisualizerModal', () => {
       ],
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: stateWithManyResults,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: stateWithManyResults,
+    });
 
     expect(markup).toContain('Showing 2 / 3 rows');
+    expect(markup).toContain('xl:grid-cols-3');
     expect(markup).toContain('Row 1');
     expect(markup).toContain('Row 2');
     expect(markup).not.toContain('Row 3');
@@ -653,17 +577,12 @@ describe('ValidationVisualizerModal', () => {
   });
 
   it('renders a dedicated failed-row area for quick inspection', () => {
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: {
-          ...baseState,
-          status: 'complete',
-        },
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: {
+        ...baseState,
+        status: 'complete',
+      },
+    });
 
     expect(markup).toContain('Rows that raised validation errors');
     expect(markup).toContain('Showing 1 / 1 failed rows');
@@ -702,14 +621,9 @@ describe('ValidationVisualizerModal', () => {
       },
     };
 
-    const markup = renderToStaticMarkup(
-      ValidationVisualizerModal({
-        state: directState,
-        onClose: () => {},
-        onSkip: () => {},
-        onStartPlayback: () => {},
-      }),
-    );
+    const markup = renderEnglishModal({
+      state: directState,
+    });
 
     expect(markup).toContain('w-full max-w-[1800px]');
     expect(markup).toContain('Validation results across the full CSV');
@@ -718,5 +632,94 @@ describe('ValidationVisualizerModal', () => {
     expect(markup).not.toContain('Current field result');
     expect(markup).not.toContain('Pydantic Class');
     expect(markup).not.toContain('Exercise result');
+  });
+
+  it('shows only visualize and skip actions before the walkthrough starts', () => {
+    const markup = renderEnglishModal({
+      state: {
+        ...baseState,
+        status: 'choice',
+        mode: 'choice',
+        speed: null,
+        request: null,
+        rawRows: [],
+        steps: [],
+        rowResults: [],
+        currentStepIndex: -1,
+        detail: 'Choose whether to visualize the validation flow or skip it.',
+      },
+    });
+
+    expect(markup).toContain('Visualize');
+    expect(markup).toContain('Skip');
+    expect(markup).not.toContain('>1x<');
+    expect(markup).not.toContain('>2x<');
+    expect(markup).not.toContain('>4x<');
+  });
+
+  it('renders playback controls for pause, previous, and next during the walkthrough', () => {
+    const markup = renderEnglishModal({
+      state: {
+        ...baseState,
+        steps: [
+          {
+            rowIndex: 0,
+            fieldName: 'age',
+            passed: true,
+            rawValue: '19',
+            validatedValue: 19,
+            message: 'Accepted as int',
+          },
+          {
+            rowIndex: 0,
+            fieldName: 'rating_count',
+            passed: true,
+            rawValue: '1,234',
+            validatedValue: 1234,
+            message: 'Accepted as int',
+          },
+        ],
+        currentStepIndex: 0,
+      },
+    });
+
+    expect(markup).toContain('Pause');
+    expect(markup).toContain('Previous');
+    expect(markup).toContain('Next');
+    expect(markup).toContain('>1x<');
+    expect(markup).toContain('>2x<');
+    expect(markup).toContain('>4x<');
+  });
+
+  it('switches the pause control to resume when walkthrough playback is paused', () => {
+    const markup = renderEnglishModal({
+      state: {
+        ...baseState,
+        isPlaybackPaused: true,
+        steps: [
+          {
+            rowIndex: 0,
+            fieldName: 'age',
+            passed: true,
+            rawValue: '19',
+            validatedValue: 19,
+            message: 'Accepted as int',
+          },
+          {
+            rowIndex: 0,
+            fieldName: 'rating_count',
+            passed: true,
+            rawValue: '1,234',
+            validatedValue: 1234,
+            message: 'Accepted as int',
+          },
+        ],
+        currentStepIndex: 1,
+      },
+    });
+
+    expect(markup).toContain('Resume');
+    expect(markup).toContain('Previous');
+    expect(markup).toContain('Next');
   });
 });

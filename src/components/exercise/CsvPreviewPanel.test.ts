@@ -1,8 +1,16 @@
-import { createElement } from 'react';
+import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { CsvPreviewPanel, CsvPreviewTable, parseCsvPreview } from './CsvPreviewPanel';
+import { I18nProvider } from '../../i18n/I18nProvider';
+import { appMessages, type AppLocale } from '../../i18n/messages';
+
+function renderWithLocale(locale: AppLocale, element: ReactElement) {
+  return renderToStaticMarkup(
+    createElement(I18nProvider, { initialLocale: locale }, element),
+  );
+}
 
 describe('parseCsvPreview', () => {
   it('parses quoted CSV cells and truncates the preview row count', () => {
@@ -54,8 +62,9 @@ describe('parseCsvPreview', () => {
 
 describe('CsvPreviewTable', () => {
   it('renders download affordance and ellipsis-friendly cells', () => {
-    const markup = renderToStaticMarkup(
-      CsvPreviewTable({
+    const markup = renderWithLocale(
+      'en',
+      createElement(CsvPreviewTable, {
         downloadUrl: '/fixtures/amazon.csv',
         fileCsvPath: 'fixtures/amazon.csv',
         preview: {
@@ -70,7 +79,7 @@ describe('CsvPreviewTable', () => {
       }),
     );
 
-    expect(markup).toContain('Download CSV');
+    expect(markup).toContain(appMessages.en.csvPreview.download);
     expect(markup).toContain('/fixtures/amazon.csv');
     expect(markup).toContain('download="amazon.csv"');
     expect(markup).toContain('truncate');
@@ -81,8 +90,9 @@ describe('CsvPreviewTable', () => {
   });
 
   it('uses a screen-contained grid layout for wide CSV files', () => {
-    const markup = renderToStaticMarkup(
-      CsvPreviewTable({
+    const markup = renderWithLocale(
+      'en',
+      createElement(CsvPreviewTable, {
         downloadUrl: '/fixtures/amazon.csv',
         fileCsvPath: 'fixtures/amazon.csv',
         preview: {
@@ -97,7 +107,7 @@ describe('CsvPreviewTable', () => {
       }),
     );
 
-    expect(markup).toContain('Showing 6 / 12 columns');
+    expect(markup).toContain(appMessages.en.csvPreview.showingColumns(6, 12));
     expect(markup).toContain('grid-template-columns:72px repeat(6, minmax(0, 1fr))');
     expect(markup).toContain('w-full');
     expect(markup).toContain('min-w-0');
@@ -107,7 +117,8 @@ describe('CsvPreviewTable', () => {
 
 describe('CsvPreviewPanel', () => {
   it('renders the preview area without a toggle button', () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderWithLocale(
+      'en',
       createElement(CsvPreviewPanel, {
         exercise: {
           id: 'csv-preview',
@@ -130,9 +141,32 @@ describe('CsvPreviewPanel', () => {
       }),
     );
 
-    expect(markup).toContain('CSV Preview');
-    expect(markup).toContain('Loading CSV...');
+    expect(markup).toContain(appMessages.en.csvPreview.title);
+    expect(markup).toContain(appMessages.en.csvPreview.loading);
     expect(markup).not.toContain('View CSV');
     expect(markup).not.toContain('Hide CSV');
+  });
+
+  it('localizes the CSV preview chrome from the shared dictionary', () => {
+    const markup = renderWithLocale(
+      'vi',
+      createElement(CsvPreviewTable, {
+        downloadUrl: '/fixtures/amazon.csv',
+        fileCsvPath: 'fixtures/amazon.csv',
+        preview: {
+          headers: ['product_id'],
+          rows: [['A-1']],
+          totalColumns: 1,
+          totalAvailableColumns: 3,
+          totalDataRows: 10,
+          shownDataRows: 8,
+          isTruncated: true,
+        },
+      }),
+    );
+
+    expect(markup).toContain(appMessages.vi.csvPreview.showingColumns(1, 3));
+    expect(markup).toContain(appMessages.vi.csvPreview.download);
+    expect(markup).toContain(appMessages.vi.csvPreview.showingFirstRows(8));
   });
 });
