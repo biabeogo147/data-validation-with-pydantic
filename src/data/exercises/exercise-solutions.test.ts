@@ -1,13 +1,12 @@
 /// <reference types="node" />
 
-import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
 import { executeExercise } from '../../lib/exercise-runner';
+import { execLocalPythonFile } from '../../lib/local-python';
 import { exerciseCatalog } from './index';
 import type {
   ExerciseDefinition,
@@ -15,8 +14,6 @@ import type {
   ExercisePlaceholderValues,
 } from '../../types/exercise';
 
-const execFileAsync = promisify(execFile);
-const LOCAL_PYTHON_PATH = 'D:/Anaconda/python.exe';
 const TEMP_ROOT = path.join(process.cwd(), '.tmp', 'exercise-solution-tests');
 
 function getSolutionValues(exercise: ExerciseDefinition): ExercisePlaceholderValues {
@@ -52,9 +49,9 @@ const localPythonAdapter: ExerciseExecutionAdapter = async (request) => {
     await writeFile(scriptPath, executableCode, 'utf8');
 
     try {
-      const execution = await execFileAsync(LOCAL_PYTHON_PATH, [scriptPath], {
+      const execution = await execLocalPythonFile({
         cwd: process.cwd(),
-        maxBuffer: 8 * 1024 * 1024,
+        scriptPath,
       });
 
       return {

@@ -1,9 +1,7 @@
 /// <reference types="node" />
 
-import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 
 import { describe, expect, it } from 'vitest';
 
@@ -11,10 +9,9 @@ import {
   buildVisualizationRequest,
   parseVisualizationStdout,
 } from './validation-visualizer';
+import { execLocalPythonFile } from './local-python';
 import type { ExerciseDefinition } from '../types/exercise';
 
-const execFileAsync = promisify(execFile);
-const LOCAL_PYTHON_PATH = 'D:/Anaconda/python.exe';
 const TEMP_ROOT = path.join(process.cwd(), '.tmp', 'validation-visualizer-tests');
 
 async function runVisualizationPython(
@@ -39,9 +36,9 @@ async function runVisualizationPython(
     await writeFile(path.join(tempDir, 'visualizer.py'), executableCode, 'utf8');
 
     try {
-      const execution = await execFileAsync(LOCAL_PYTHON_PATH, ['visualizer.py'], {
+      const execution = await execLocalPythonFile({
         cwd: tempDir,
-        maxBuffer: 8 * 1024 * 1024,
+        scriptPath: 'visualizer.py',
       });
 
       return execution.stdout;
