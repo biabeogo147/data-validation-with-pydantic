@@ -64,8 +64,10 @@ describe('amazon exercise curriculum', () => {
     expect(fieldConstraintExercise.templateCode).not.toContain(
       '"has_category_path"',
     );
+    expect(fieldConstraintExercise.example?.code).toContain('"product_id"');
     expect(fieldConstraintExercise.example?.code).toContain('"product_name"');
-    expect(fieldConstraintExercise.example?.code).toContain('"category"');
+    expect(fieldConstraintExercise.example?.code).toContain('"rating"');
+    expect(fieldConstraintExercise.example?.code).not.toContain('"category"');
   });
 
   it('uses field validators to normalize hierarchy and numeric strings without touching rating', () => {
