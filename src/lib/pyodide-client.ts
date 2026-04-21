@@ -3,6 +3,8 @@ import type {
   ExerciseExecutionResponse,
   ExerciseFixtureMount,
 } from '../types/exercise';
+import type { AppLocale } from '../i18n/messages';
+import { normalizePythonExecutionError } from './python-error';
 
 export type PyodideStage =
   | 'booting'
@@ -195,6 +197,7 @@ async function mountFixtures(
 export async function runExerciseInPyodide(
   request: ExerciseExecutionRequest,
   onStageChange?: (stage: PyodideStage) => void,
+  locale: AppLocale = 'en',
 ): Promise<ExerciseExecutionResponse> {
   const pyodide = await ensurePyodide(onStageChange);
   await ensurePackages(pyodide, request.packages, onStageChange);
@@ -220,8 +223,11 @@ export async function runExerciseInPyodide(
   try {
     await pyodide.runPythonAsync(request.code);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Python execution failed: ${message}`);
+    const message = normalizePythonExecutionError(
+      error instanceof Error ? error.message : String(error),
+      locale,
+    );
+    throw new Error(message);
   }
 
   return {

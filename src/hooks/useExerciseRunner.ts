@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { executeExercise } from '../lib/exercise-runner';
 import { getRuntimeBasePath } from '../lib/github-pages';
 import { runExerciseInPyodide, type PyodideStage } from '../lib/pyodide-client';
+import { useI18n } from '../i18n/I18nProvider';
 import type {
   ExerciseDefinition,
   ExercisePlaceholderValues,
@@ -35,6 +36,7 @@ const IDLE_STATE: ExerciseRunnerState = {
 };
 
 export function useExerciseRunner() {
+  const { locale } = useI18n();
   const [state, setState] = useState<ExerciseRunnerState>(IDLE_STATE);
   const activeRunIdRef = useRef(0);
 
@@ -65,8 +67,9 @@ export function useExerciseRunner() {
             phase: stage === 'running' ? 'running' : 'booting',
             detail: STAGE_MESSAGES[stage],
           }));
-        }),
+        }, locale),
       getRuntimeBasePath(),
+      locale,
     );
 
     if (activeRunIdRef.current !== runId) {

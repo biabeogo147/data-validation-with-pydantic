@@ -3,6 +3,7 @@ import { useRef, useState, type Dispatch, type RefObject, type SetStateAction } 
 import { getFixtureMounts } from '../lib/exercise-runner';
 import { getRuntimeBasePath } from '../lib/github-pages';
 import { runExerciseInPyodide } from '../lib/pyodide-client';
+import { useI18n } from '../i18n/I18nProvider';
 import {
   buildVisualizationRequest,
   parseVisualizationStdout,
@@ -75,6 +76,7 @@ function uniquePackages(packages: string[]) {
 async function executeVisualizationRequest(
   request: VisualizationRequest,
   exercise: ExerciseDefinition,
+  locale: 'en' | 'vi',
   token: number,
   activeTokenRef: RefObject<number>,
   setState: Dispatch<SetStateAction<ValidationVisualizerState>>,
@@ -99,6 +101,7 @@ async function executeVisualizationRequest(
         detail: loadingDetail,
       }));
     },
+    locale,
   );
 
   if (activeTokenRef.current !== token) {
@@ -114,6 +117,7 @@ export function useValidationVisualizer(options: {
     values: ExercisePlaceholderValues,
   ) => Promise<ExerciseRunResult>;
 }) {
+  const { locale } = useI18n();
   const [state, setState] = useState<ValidationVisualizerState>(INITIAL_STATE);
   const stateRef = useRef<ValidationVisualizerState>(INITIAL_STATE);
   const activeTokenRef = useRef(0);
@@ -305,6 +309,7 @@ export function useValidationVisualizer(options: {
         const parsed = await executeVisualizationRequest(
           request,
           exercise,
+          locale,
           token,
           activeTokenRef,
           setVisualizerState,
@@ -444,6 +449,7 @@ export function useValidationVisualizer(options: {
       const parsed = await executeVisualizationRequest(
         request,
         exercise,
+        locale,
         token,
         activeTokenRef,
         setVisualizerState,

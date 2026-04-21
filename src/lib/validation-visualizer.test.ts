@@ -276,6 +276,10 @@ describe('buildVisualizationRequest', () => {
     expect(request.pythonSource).toContain(
       '__field: SchemaSerializer(__visualizer_field_schemas[__field])',
     );
+    expect(request.pythonSource).toContain(
+      '__PYDANTIC_VISUALIZER_MISSING_FIELD__:{__field}',
+    );
+    expect(request.pythonSource).not.toContain('visualization model');
   });
 
   it('serializes validated field and row values in json mode for browser-safe visualization output', () => {

@@ -1,5 +1,7 @@
 import { withBasePath } from './github-pages';
+import { normalizePythonExecutionError } from './python-error';
 import { assembleExerciseCode } from './template';
+import type { AppLocale } from '../i18n/messages';
 import type {
   ExerciseCheckDefinition,
   ExerciseCheckResult,
@@ -132,6 +134,7 @@ export async function executeExercise(
   values: ExercisePlaceholderValues,
   adapter: ExerciseExecutionAdapter,
   basePath: string = '/',
+  locale: AppLocale = 'en',
 ): Promise<ExerciseRunResult> {
   const executableCode = buildExecutableCode(exercise, values);
   const fixtures = getFixtureMounts(exercise, basePath);
@@ -160,7 +163,10 @@ export async function executeExercise(
       checks,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = normalizePythonExecutionError(
+      error instanceof Error ? error.message : String(error),
+      locale,
+    );
 
     return {
       status: 'error',

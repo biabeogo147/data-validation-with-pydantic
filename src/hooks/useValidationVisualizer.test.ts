@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useValidationVisualizer } from './useValidationVisualizer';
+import { I18nProvider } from '../i18n/I18nProvider';
 import type { ExerciseDefinition, ExerciseRunResult } from '../types/exercise';
 
 const buildVisualizationRequestMock = vi.fn();
@@ -186,7 +187,15 @@ describe('useValidationVisualizer', () => {
     root = createRoot(container);
 
     await act(async () => {
-      root.render(createElement(HookHarness, { runExercise: runExerciseMock }));
+      root.render(
+        createElement(
+          I18nProvider,
+          { initialLocale: 'vi' },
+          createElement(HookHarness, {
+            runExercise: runExerciseMock,
+          }),
+        ),
+      );
     });
   });
 
@@ -214,6 +223,12 @@ describe('useValidationVisualizer', () => {
     await act(async () => {
       await latestVisualizer!.startPlayback('1x');
     });
+
+    expect(runExerciseInPyodideMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Function),
+      'vi',
+    );
 
     expect(latestVisualizer!.state.status).toBe('playing');
     expect(latestVisualizer!.state.currentStepIndex).toBe(0);

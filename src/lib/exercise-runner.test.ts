@@ -138,4 +138,52 @@ describe('exercise runner orchestration', () => {
     expect(result.stderr).toContain('Pyodide boot failed');
     expect(result.checks).toEqual([]);
   });
+
+  it('summarizes schema-definition tracebacks instead of exposing the full traceback', async () => {
+    const adapter = vi.fn().mockRejectedValue(
+      new Error(
+        [
+          'Traceback (most recent call last):',
+          '  File "<exec>", line 3, in <module>',
+          '    class User(BaseModel):',
+          "NameError: name 'StrictInt' is not defined",
+        ].join('\n'),
+      ),
+    );
+
+    const result = await executeExercise(exercise, { MODEL_CODE: 'class User: pass' }, adapter);
+
+    expect(result.status).toBe('error');
+    expect(result.stderr).toContain('Schema definition error.');
+    expect(result.stderr).toContain("NameError: name 'StrictInt' is not defined");
+    expect(result.stderr).not.toContain('Traceback');
+    expect(result.stderr).not.toContain('line 3');
+  });
+
+  it('returns localized schema-definition errors when a locale is provided', async () => {
+    const adapter = vi.fn().mockRejectedValue(
+      new Error(
+        [
+          'Traceback (most recent call last):',
+          '  File "<exec>", line 3, in <module>',
+          '    class User(BaseModel):',
+          "NameError: name 'StrictInt' is not defined",
+        ].join('\n'),
+      ),
+    );
+
+    const result = await executeExercise(
+      exercise,
+      { MODEL_CODE: 'class User: pass' },
+      adapter,
+      '/',
+      'vi',
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.stderr).toContain('Lỗi định nghĩa schema.');
+    expect(result.stderr).toContain(
+      'Hãy kiểm tra xem bạn đã import đầy đủ các type, helper hoặc validator chưa.',
+    );
+  });
 });
